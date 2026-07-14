@@ -70,7 +70,7 @@
     min-height: 92vh;
     min-height: 92svh;
     display: flex; align-items: center;
-    background: linear-gradient(180deg, rgba(15,13,9,0.55), rgba(10,8,5,0.88)), url('assets/hero-bg.jpg') center 55% / cover no-repeat;
+    background: linear-gradient(180deg, rgba(15,13,9,0.55), rgba(10,8,5,0.88)), url('/assets/hero-bg.jpg') center 55% / cover no-repeat;
     color: var(--cream);
   }
   .hero .wrap { padding-top: 60px; padding-bottom: 60px; }
@@ -154,7 +154,7 @@
   .about {
     position: relative;
     color: var(--cream);
-    background: linear-gradient(180deg, rgba(15,13,9,0.80), rgba(15,13,9,0.93)), url('assets/about-bg.jpg') center 42% / cover no-repeat;
+    background: linear-gradient(180deg, rgba(15,13,9,0.80), rgba(15,13,9,0.93)), url('/assets/about-bg.jpg') center 42% / cover no-repeat;
   }
   .about .wrap { display: grid; grid-template-columns: 220px 1fr; gap: 60px; align-items: start; }
   .avatar {
