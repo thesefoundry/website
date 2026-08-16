@@ -216,10 +216,11 @@
   .article-body .wrap { max-width: 760px; }
   .article-body p { font-size: 17px; color: #3a352a; margin-bottom: 20px; }
   .article-body h2 { font-size: 24px; color: var(--ink); margin: 40px 0 16px; }
-  .article-body ul { margin: 0 0 24px 22px; }
+  .article-body ul, .article-body ol { margin: 0 0 24px 22px; }
   .article-body li { font-size: 16px; color: #3a352a; margin-bottom: 10px; }
   .article-body .text-link { color: var(--gold-dark); font-weight: 600; border-bottom: 1px solid var(--gold-dark); }
   .article-body .text-link:hover { color: var(--ink); border-color: var(--ink); }
+  .article-body code { background: var(--cream-dim); border: 1px solid var(--line); padding: 1px 6px; border-radius: 3px; font-size: 14px; }
 
   .download-box { background: var(--cream-dim); border: 1px solid var(--line); border-left: 3px solid var(--gold); padding: 28px 30px; margin: 40px 0; }
   .download-box .label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold-dark); font-weight: 600; margin-bottom: 8px; }
