@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Demo Review &amp; Coaching Guide | The SE Foundry</title>
-<meta name="description" content="A free scoring rubric and coaching framework for reviewing recorded SE demos, with a fillable scorecard. Editable Word doc, no email required.">
+<meta name="description" content="A free demo scoring rubric, an AI demo coach you can run in Claude, and a free live review hour with Scott. Self-assess, get coached, get better. No email required.">
 <meta property="og:title" content="Demo Review & Coaching Guide | The SE Foundry">
-<meta property="og:description" content="Score a demo on what actually moves deals, then run a coaching conversation that makes it better. Free, editable, no email required.">
+<meta property="og:description" content="Score your own demo, run it through the AI coach, then get a free hour of live review. Worksheet and skill are free, no email required.">
 <link rel="icon" type="image/png" href="/assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,7 +33,7 @@
     <a class="back-link" href="/resources/">&#8592; Back to Resources</a>
     <p class="tag">Guide</p>
     <h1>Demo Review &amp; Coaching Guide</h1>
-    <p class="dek">Demo coaching usually stops somewhere between 30 and 90 days, right about the time the SE has mastered the &quot;show-up and throw-up&quot; demo: the one that jams all the features and benefits into a 50-minute monologue with five minutes at the end dedicated to &quot;any questions?&quot; This gives you a consistent way to review one, score it, and turn that score into a coaching conversation that actually changes the next demo.</p>
+    <p class="dek">Demo coaching usually stops somewhere between 30 and 90 days, right about the time the SE has mastered the &quot;show-up and throw-up&quot; demo: the one that jams all the features and benefits into a 50-minute monologue with five minutes at the end dedicated to &quot;any questions?&quot; This page gives you a full coaching loop instead: a rubric to score against, an AI coach to score with, and me, if you want a human in the room.</p>
   </div>
 </section>
 
@@ -41,7 +41,15 @@
   <div class="wrap">
     <p>Most demo feedback sounds like "good job" or "that felt long." Neither one tells an SE what to do differently next time. This guide replaces the gut-feel version with a rubric, a review process, and a coaching conversation built to change behavior, not just record an opinion.</p>
 
-    <h2>What's inside</h2>
+    <h2>Use this in three steps</h2>
+    <p>Score your own demo before anyone else does. Self-critique is a skill, and the SEs who improve fastest are the ones who build it. Then let the coach check your work. Then, if you want a human in the loop, that part is free too.</p>
+    <ol>
+      <li><strong>Self-assess with the worksheet.</strong> Watch your recording with the rubric open, score all seven dimensions, and write down your evidence with timestamps.</li>
+      <li><strong>Run it through the Demo Review Coach.</strong> A free Claude skill built from how I review demos. It scores the tape, compares its read to yours, and coaches on the gap.</li>
+      <li><strong>Send it to me.</strong> Worksheet, transcript, and ideally the recording. You get an hour of live coaching, free. Details below.</li>
+    </ol>
+
+    <h2>What's inside the guide</h2>
     <p>Seven sections, from the thinking behind the rubric to a scorecard you fill out as you go.</p>
     <ul>
       <li><strong>The philosophy</strong>: three principles to keep in view while you watch and score, including why a demo should play like a Lego set built for the room in front of you, not a scripted monologue</li>
@@ -53,17 +61,38 @@
       <li><strong>A fillable scorecard</strong>: the whole rubric in an appendix you fill out and save per demo, or print</li>
     </ul>
 
-    <h2>How to use it</h2>
-    <p>Watch the recording once with the rubric open and score as you go. Then sit down with your SE and lead with what worked before you get to the one thing you'd change. The rubric gives you the score. The conversation is what actually makes someone better.</p>
-
     <div class="download-box">
-      <div class="label">Download</div>
+      <div class="label">Step 1 &middot; Download</div>
       <div class="filename">SE Foundry Demo Review &amp; Coaching Guide (.docx)</div>
       <p>Delivered as an editable Word document. Score directly in it and save a fresh copy per demo, or print it.</p>
       <a class="btn btn-gold" href="/assets/downloads/se-foundry-demo-review-coaching-guide.docx" download>Download the guide</a>
     </div>
 
-    <p>Want a second set of eyes on how your team demos today? <a class="text-link" href="/#contact">Book an intro call</a> and I'll walk through it with you.</p>
+    <h2>The Demo Review Coach: an AI coach built from how I coach</h2>
+    <p>The worksheet gives you the rubric. The skill gives you the coach. I turned the way I review demos into a skill Claude can run: evidence-cited scores across all seven dimensions, every genuine strength named, and exactly one focus for next time. Not a pile-on. Not a compliment sandwich. A coaching conversation.</p>
+    <p>Bring your self-scored worksheet and it does something no generic AI prompt will: it compares your read of the demo to what the tape shows, and coaches on the difference. The gap between those two scores is where you grow.</p>
+    <p>Installing it takes about a minute:</p>
+    <ol>
+      <li>Download the .skill file below.</li>
+      <li>Open Claude (web or desktop), go to Settings, find Skills under Capabilities, and upload the file. Claude Code users can unzip it into <code>~/.claude/skills</code> instead.</li>
+      <li>Start a chat and say "review my demo." Attach your worksheet and the transcript. The coach takes it from there.</li>
+    </ol>
+    <p>It runs in your Claude, on your data. Nothing comes back to me unless you send it. Works best on Claude Sonnet or better.</p>
+
+    <div class="download-box">
+      <div class="label">Step 2 &middot; Download</div>
+      <div class="filename">SE Foundry Demo Review Coach (.skill)</div>
+      <p>A free Claude skill. Install once, then bring it every demo you want scored. Pairs best with a filled-out worksheet and a transcript.</p>
+      <a class="btn btn-gold" href="/assets/downloads/se-foundry-demo-review-coach.skill" download>Download the skill</a>
+    </div>
+
+    <h2>Step 3: Get my eyes on it. Free.</h2>
+    <p>The coach is built from how I review demos. It's still not me in the room. So here's the offer: send me your self-scored worksheet, the call transcript, and ideally a way to watch the recording, and I'll give you an hour. Live, one on one, free. We'll walk the tape together, compare your scores to mine, and you'll leave with one focus for your next demo.</p>
+    <p>Why free? Every review makes the worksheet and the coach sharper. And this is the part of the job I love.</p>
+    <p>Ground rules, so there's no fine print: your call stays private, and nothing you send gets shared anywhere. If a pattern from your review would improve these tools, I'll anonymize it and ask you first. Recordings get deleted after we're done. I take two of these a week, so if the week is full, you're at the front of next week's line.</p>
+    <a class="btn btn-gold" href="mailto:scott@thesefoundry.com?subject=Free%20demo%20review">Claim your free review</a>
+
+    <p style="margin-top:32px;">Want a second set of eyes on how your whole team demos? <a class="text-link" href="/#contact">Book an intro call</a> and I'll walk through it with you.</p>
   </div>
 </section>
 
