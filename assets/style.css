@@ -25,13 +25,20 @@
   }
   a { color: inherit; text-decoration: none; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+  /* Default to the AA-safe gold: most sections are cream, and an eyebrow
+     added to a new light section should be legible without extra thought.
+     Dark sections opt back into the brighter gold below. */
   .eyebrow {
     text-transform: uppercase;
     letter-spacing: 0.18em;
     font-size: 12.5px;
     font-weight: 600;
-    color: var(--gold);
+    color: var(--gold-text);
   }
+  .hero .eyebrow,
+  .services .eyebrow,
+  .about .eyebrow,
+  .resources-intro .eyebrow { color: var(--gold); }
 
   /* NAV */
   nav {
