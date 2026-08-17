@@ -5,6 +5,7 @@
     --cream-dim: #f1ead9;
     --gold: #c9a04c;
     --gold-dark: #9c7830;
+    --gold-text: #806227;
     --gold-light: #eddca0;
     --line: rgba(201,160,76,0.25);
   }
@@ -106,7 +107,7 @@
   .moment .grid { display: grid; grid-template-columns: 1fr; gap: 0; }
   .moment h2 { font-size: clamp(30px, 4vw, 44px); max-width: 680px; margin-bottom: 30px; }
   .moment .body p { font-size: 18px; color: #3a352a; max-width: 720px; margin-bottom: 20px; }
-  .moment .body p:last-child { font-weight: 600; color: var(--gold-dark); }
+  .moment .body p:last-child { font-weight: 600; color: var(--gold-text); }
 
   /* PATHS */
   .paths { background: var(--cream-dim); }
@@ -114,7 +115,7 @@
   .path-card { border-top: 3px solid var(--gold); padding-top: 20px; }
   .path-card h3 { font-size: 22px; color: var(--ink); margin-bottom: 10px; }
   .path-card p { font-size: 15.5px; color: #4a4535; margin-bottom: 14px; }
-  .path-card a { font-size: 14px; font-weight: 600; color: var(--gold-dark); border-bottom: 1px solid var(--gold-dark); padding-bottom: 1px; }
+  .path-card a { font-size: 14px; font-weight: 600; color: var(--gold-text); border-bottom: 1px solid var(--gold-text); padding-bottom: 1px; }
   .path-card a:hover { color: var(--ink); border-color: var(--ink); }
 
   /* SERVICES */
@@ -137,7 +138,7 @@
   .individuals { background: var(--cream); }
   .indiv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 10px; }
   .indiv-card { background: var(--cream); padding: 34px 30px; min-height: 200px; }
-  .indiv-card .num { color: var(--gold-dark); font-family: 'Cormorant Garamond', serif; font-size: 15px; letter-spacing: 0.1em; }
+  .indiv-card .num { color: var(--gold-text); font-family: 'Cormorant Garamond', serif; font-size: 15px; letter-spacing: 0.1em; }
   .indiv-card h3 { font-size: 22px; margin: 14px 0 12px; color: var(--ink); }
   .indiv-card p { font-size: 15px; color: #4a4535; }
 
@@ -146,7 +147,7 @@
   .approach .intro { max-width: 700px; font-size: 18px; color: #3a352a; margin-bottom: 50px; }
   .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-bottom: 46px; }
   .pillar { border-top: 3px solid var(--gold); padding-top: 20px; }
-  .pillar .tag { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 24px; color: var(--gold-dark); }
+  .pillar .tag { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 24px; color: var(--gold-text); }
   .pillar p { font-size: 15.5px; color: #4a4535; margin-top: 10px; }
   .approach .closing { max-width: 720px; font-size: 18px; color: #3a352a; border-left: 3px solid var(--gold); padding-left: 24px; }
 
@@ -223,10 +224,10 @@
   .resources-list > .wrap { position: relative; z-index: 1; }
   .resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 40px; margin-top: 46px; }
   .resource-card { background: rgba(250,246,238,0.84); border: 1px solid var(--line); border-top: 3px solid var(--gold); padding: 30px 30px 26px; display: flex; flex-direction: column; }
-  .resource-card .tag { text-transform: uppercase; letter-spacing: 0.14em; font-size: 11.5px; font-weight: 600; color: var(--gold-dark); margin-bottom: 10px; }
+  .resource-card .tag { text-transform: uppercase; letter-spacing: 0.14em; font-size: 11.5px; font-weight: 600; color: var(--gold-text); margin-bottom: 10px; }
   .resource-card h3 { font-size: 24px; color: var(--ink); margin-bottom: 12px; }
   .resource-card p { font-size: 15.5px; color: #4a4535; margin-bottom: 20px; flex-grow: 1; }
-  .resource-card a.resource-link { font-size: 14px; font-weight: 600; color: var(--gold-dark); border-bottom: 1px solid var(--gold-dark); padding-bottom: 1px; align-self: flex-start; }
+  .resource-card a.resource-link { font-size: 14px; font-weight: 600; color: var(--gold-text); border-bottom: 1px solid var(--gold-text); padding-bottom: 1px; align-self: flex-start; }
   .resource-card a.resource-link:hover { color: var(--ink); border-color: var(--ink); }
 
   /* RESOURCE DETAIL / ARTICLE */
@@ -244,12 +245,12 @@
   .article-body h2 { font-size: 24px; color: var(--ink); margin: 40px 0 16px; }
   .article-body ul, .article-body ol { margin: 0 0 24px 22px; }
   .article-body li { font-size: 16px; color: #3a352a; margin-bottom: 10px; }
-  .article-body .text-link { color: var(--gold-dark); font-weight: 600; border-bottom: 1px solid var(--gold-dark); }
+  .article-body .text-link { color: var(--gold-text); font-weight: 600; border-bottom: 1px solid var(--gold-text); }
   .article-body .text-link:hover { color: var(--ink); border-color: var(--ink); }
   .article-body code { background: var(--cream-dim); border: 1px solid var(--line); padding: 1px 6px; border-radius: 3px; font-size: 14px; }
 
   .download-box { background: var(--cream-dim); border: 1px solid var(--line); border-left: 3px solid var(--gold); padding: 28px 30px; margin: 40px 0; }
-  .download-box .label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold-dark); font-weight: 600; margin-bottom: 8px; }
+  .download-box .label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold-text); font-weight: 600; margin-bottom: 8px; }
   .download-box .filename { font-size: 15px; color: #55503f; margin-bottom: 10px; font-weight: 600; }
   .download-box p { font-size: 15px; color: #55503f; margin-bottom: 18px; }
 
