@@ -58,6 +58,16 @@
     color: var(--cream-dim); font-size: 14.5px; font-weight: 500; opacity: 0.85;
   }
   nav .links a.nav-link:hover { opacity: 1; color: var(--gold-light); }
+
+  /* Mobile menu toggle: hidden on desktop, revealed in the mobile media query
+     below. The checkbox is visually hidden but kept focusable for keyboard use;
+     the .nav-burger label is the tappable control. No JavaScript required. */
+  .nav-toggle {
+    position: absolute; opacity: 0; width: 1px; height: 1px;
+    pointer-events: none;
+  }
+  .nav-burger { display: none; }
+
   .btn {
     display: inline-block; padding: 12px 26px; border-radius: 3px;
     font-weight: 600; font-size: 14.5px; letter-spacing: 0.02em;
@@ -262,7 +272,34 @@
   .download-box p { font-size: 15px; color: #55503f; margin-bottom: 18px; }
 
   @media (max-width: 860px) {
-    nav .links { display: none; }
+    /* Mobile navigation: the desktop link row is replaced by a tap-to-open
+       menu. Previously .links was simply hidden here, which left Resources
+       (a separate page) unreachable on phones. */
+    nav .wrap { flex-wrap: wrap; column-gap: 16px; }
+    .nav-burger {
+      display: flex; flex-direction: column; justify-content: center;
+      gap: 5px; width: 44px; height: 44px; padding: 10px;
+      margin: -10px -10px -10px auto; cursor: pointer;
+    }
+    .nav-burger span {
+      display: block; width: 24px; height: 2px; border-radius: 2px;
+      background: var(--cream-dim);
+      transition: transform .2s ease, opacity .2s ease;
+    }
+    nav .links {
+      display: none;
+      flex-direction: column; align-items: flex-start;
+      gap: 2px; width: 100%; padding: 6px 0 10px;
+    }
+    nav .links a.nav-link { padding: 11px 2px; font-size: 16px; opacity: 0.92; }
+    nav .links a.btn { margin-top: 10px; }
+    .nav-toggle:checked ~ .links { display: flex; }
+    /* Burger morphs into an X when the menu is open */
+    .nav-toggle:checked + .nav-burger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-toggle:checked + .nav-burger span:nth-child(2) { opacity: 0; }
+    .nav-toggle:checked + .nav-burger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .nav-toggle:focus-visible + .nav-burger { outline: 2px solid var(--gold); outline-offset: 3px; }
+
     .service-grid { grid-template-columns: 1fr; }
     .path-grid { grid-template-columns: 1fr; }
     .indiv-grid { grid-template-columns: 1fr; }
