@@ -14,6 +14,9 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://localhost:4000',
     trace: 'on-first-retry',
+    // Save a screenshot of the page whenever a test fails, so a red run
+    // shows the broken rendering, not just which assertion tripped.
+    screenshot: 'only-on-failure',
   },
   webServer: {
     command: 'python3 -m http.server 4000 --directory ../_site',
