@@ -50,3 +50,14 @@ jobs:
           name: playwright-report
           path: tests/playwright-report
           retention-days: 14
+
+      # On a failing run, upload the failure screenshots (and traces) on their
+      # own, so you can see the broken rendering without opening the full report.
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: failure-screenshots
+          path: tests/test-results
+          retention-days: 14
+          if-no-files-found: ignore
