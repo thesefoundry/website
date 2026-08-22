@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the site
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Build the site the same way GitHub Pages does (Jekyll), so the tests
       # run against the real deployed output, including the shared includes.
@@ -27,9 +27,9 @@ jobs:
         run: bundle exec jekyll build
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install test dependencies
         working-directory: tests
@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report
           path: tests/playwright-report
