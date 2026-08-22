@@ -1,3 +1,5 @@
+---
+---
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,21 +16,7 @@
 </head>
 <body>
 
-<nav>
-  <div class="wrap">
-    <a href="#top"><img src="assets/logo.png" alt="The SE Foundry"></a>
-    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Open navigation menu">
-    <label for="nav-toggle" class="nav-burger" aria-hidden="true"><span></span><span></span><span></span></label>
-    <div class="links">
-      <a class="nav-link" href="#services">For Companies</a>
-      <a class="nav-link" href="#individuals">For SEs</a>
-      <a class="nav-link" href="#approach">Approach</a>
-      <a class="nav-link" href="#about">About</a>
-      <a class="nav-link" href="/resources/">Resources</a>
-      <a class="btn btn-gold" href="#contact" style="padding:10px 20px;">Book an intro call</a>
-    </div>
-  </div>
-</nav>
+{% include nav.html %}
 
 <section class="hero" id="top">
   <div class="wrap">
@@ -204,18 +192,7 @@
   </div>
 </section>
 
-<footer>
-  <div class="wrap">
-    <div class="brand">
-      <img src="assets/logo.png" alt="The SE Foundry">
-      <div class="tagline">Build the function. Win the deal.</div>
-    </div>
-    <div class="meta">
-      <div><a href="mailto:scott@thesefoundry.com">scott@thesefoundry.com</a> &nbsp;·&nbsp; thesefoundry.com</div>
-      <div class="copyright">© 2026 The SE Foundry. All rights reserved.</div>
-    </div>
-  </div>
-</footer>
+{% include footer.html %}
 
 </body>
 </html>
