@@ -1,0 +1,12 @@
+{
+  "name": "thesefoundry-site-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser regression tests for thesefoundry.com (desktop + mobile).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}
