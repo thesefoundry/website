@@ -17,6 +17,7 @@ const PAGES = [
   { path: '/resources/poc-success-plan.html', title: /Success Plan/ },
   { path: '/resources/meddpicc-analysis-worksheet.html', title: /MEDDPICC/ },
   { path: '/resources/demo-review-coaching-guide.html', title: /Demo Review/ },
+  { path: '/resources/discovery-call-review-worksheet.html', title: /Discovery Call/ },
 ];
 
 function isMobile(page) {
