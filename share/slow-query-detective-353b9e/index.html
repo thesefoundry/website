@@ -1,0 +1,1129 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex, nofollow, noarchive"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Slow Query Detective</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  /* Layout: one incident desk. The wait-time chart is the hero; chrome stays monochrome so color always means data. */
+  --bg:#eef1f4; --surface:#ffffff; --surface-2:#f4f6f8; --line:#d6dde4;
+  --ink:#111a23; --muted:#566676; --faint:#8a98a6;
+  --btn:#111a23; --btn-ink:#ffffff; --focus:#3a6fe0;
+  --good:#17784a; --warn:#9a6208; --bad:#b92f26;
+  --good-bg:#e1f3e9; --warn-bg:#faedd3; --bad-bg:#fbe4e1;
+  --w-cpu:#d68a12; --w-io:#3a6fe0; --w-lock:#c8402f; --w-net:#1f9fb0; --w-mem:#8a63cf; --w-other:#9aa7b4;
+  --font-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --font-body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e141a; --surface:#151d25; --surface-2:#1a252f; --line:#2a3743;
+    --ink:#e7edf2; --muted:#9aa9b7; --faint:#6f7f8e;
+    --btn:#e7edf2; --btn-ink:#0e141a; --focus:#7ba3ff;
+    --good:#43c58a; --warn:#e3a84a; --bad:#ff7b6e;
+    --good-bg:#12301f; --warn-bg:#352a12; --bad-bg:#3a1c1a;
+    --w-cpu:#e3a03a; --w-io:#6d97f2; --w-lock:#ee6a58; --w-net:#44bfcd; --w-mem:#a98ae0; --w-other:#6f7f8e;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e141a; --surface:#151d25; --surface-2:#1a252f; --line:#2a3743;
+  --ink:#e7edf2; --muted:#9aa9b7; --faint:#6f7f8e;
+  --btn:#e7edf2; --btn-ink:#0e141a; --focus:#7ba3ff;
+  --good:#43c58a; --warn:#e3a84a; --bad:#ff7b6e;
+  --good-bg:#12301f; --warn-bg:#352a12; --bad-bg:#3a1c1a;
+  --w-cpu:#e3a03a; --w-io:#6d97f2; --w-lock:#ee6a58; --w-net:#44bfcd; --w-mem:#a98ae0; --w-other:#6f7f8e;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.5 var(--font-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:18px 56px;
+}
+.wrap{max-width:1160px;margin:0 auto}
+h1,h2,h3{font-family:var(--font-display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+p{margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--muted)}
+.sm{font-size:13px}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:10px;font:700 18px var(--font-display)}
+.brand svg{display:block}
+.prog{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--muted)}
+.pips{display:flex;gap:6px}
+.pip{width:24px;height:6px;border-radius:3px;background:var(--line)}
+.pip.on{background:var(--ink)}
+.pip.done{background:var(--good)}
+.prog b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* controls */
+.btn{font:600 14px var(--font-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;border-radius:8px;cursor:pointer;line-height:1.2}
+.btn:hover:not(:disabled){border-color:var(--ink)}
+.btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.btn.big{padding:13px 22px;font-size:16px;border-radius:10px}
+a.btn{display:inline-block;text-decoration:none}
+.idle{position:fixed;left:50%;transform:translateX(-50%);bottom:max(16px,env(safe-area-inset-bottom,0px));z-index:20;max-width:calc(100% - 32px);padding:11px 18px;border-radius:10px;background:var(--btn);color:var(--btn-ink);font-size:14px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.topr{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap}
+.btn.sound{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;font-size:13px;border-radius:99px}
+.btn.sound svg{display:block}
+.cta-row{display:flex;gap:10px;flex-wrap:wrap}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn[aria-pressed="true"]{background:var(--surface-2);border-color:var(--ink)}
+.btn.primary[aria-pressed="true"]{background:var(--btn)}
+.link{background:none;border:0;padding:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.eyebrow{font:500 12px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pill{display:inline-block;font:600 12px var(--font-body);padding:2px 9px;border-radius:99px;white-space:nowrap}
+.pill.crit{background:var(--bad-bg);color:var(--bad)}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.neutral{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap}
+.chip i,.rchip i,.lchip i{display:inline-block;width:10px;height:10px;border-radius:3px}
+
+/* intro */
+.intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:32px;align-items:center;margin-bottom:34px}
+.intro h1{font-size:clamp(38px,6vw,64px);line-height:1;font-weight:800;margin:10px 0 16px}
+.intro .lede{font-size:17px;color:var(--muted);max-width:52ch;margin-bottom:22px}
+.intro .cta{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.hero-chart{padding:16px 16px 12px}
+.hero-chart .cap{font-size:13px;color:var(--muted);margin-top:8px}
+.features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.feat{padding:14px 16px}
+.feat h3{font-size:16px;margin-bottom:4px}
+.feat p{font-size:14px;color:var(--muted)}
+.sec-title{font:700 20px var(--font-display);margin:0 0 12px}
+
+/* brief */
+.brief{max-width:760px;margin:0 auto;padding:26px}
+.tk-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tag{font:600 12px var(--font-mono);padding:2px 8px;border-radius:5px;border:1px solid var(--bad);color:var(--bad)}
+.brief h1{font-size:clamp(28px,4.5vw,40px);line-height:1.08;font-weight:800;margin:12px 0 10px}
+.brief .alert{font-size:17px;font-weight:600;margin-bottom:10px}
+.brief .story{color:var(--muted);margin-bottom:18px;max-width:62ch}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;margin-bottom:20px}
+.facts div{padding:10px 14px;border-right:1px solid var(--line);min-width:0}
+.facts div:last-child{border-right:0}
+.facts dt{font:500 11px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.facts dd{margin:0;font-size:14px}
+.howto{font-size:14px;color:var(--muted);margin-bottom:20px;padding:12px 14px;background:var(--surface-2);border-radius:8px}
+
+/* vitals */
+.vitals{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);background:var(--surface);border-radius:12px;margin-bottom:16px}
+.vit{padding:12px 16px;border-right:1px solid var(--line);min-width:0}
+.vit:last-child{border-right:0}
+.vit .lab{display:block;font:500 11px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.vit .num{font:700 28px/1 var(--font-display);font-variant-numeric:tabular-nums}
+.vit .unit{font-size:13px;color:var(--muted);margin-left:4px}
+.vit .sub{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.vit .pill{font-size:14px;padding:4px 12px}
+
+/* play layout */
+.play-grid{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:16px;align-items:start}
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line)}
+.tab{appearance:none;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);font:600 14px var(--font-body);padding:10px 14px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:7px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.tab .seen{width:6px;height:6px;border-radius:50%;background:var(--good)}
+.tab.nudge{animation:nudge 1.1s ease-in-out 6}
+@keyframes nudge{50%{background:var(--warn-bg);color:var(--ink)}}
+.tool-desc{font-size:14px;color:var(--muted);margin:10px 2px 12px}
+.panel{padding:18px}
+.empty{text-align:center;padding:36px 12px;display:grid;gap:14px;justify-items:center;color:var(--muted)}
+
+/* charts */
+.wait-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px 16px;flex-wrap:wrap;margin-bottom:10px}
+.wait-head strong{font:700 20px var(--font-display)}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.lchip{display:inline-flex;align-items:center;gap:7px;font:500 13px var(--font-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:4px 11px;cursor:pointer}
+.lchip.on{border-color:var(--ink);background:var(--surface-2)}
+span.lchip{cursor:default}
+.chart svg{display:block;max-width:100%}
+.chart .grid line{stroke:var(--line)}
+.chart .axis text{fill:var(--muted);font:11px var(--font-mono)}
+.seg-cpu{fill:var(--w-cpu)} .seg-io{fill:var(--w-io)} .seg-lock{fill:var(--w-lock)}
+.seg-net{fill:var(--w-net)} .seg-mem{fill:var(--w-mem)} .seg-other{fill:var(--w-other)}
+.seg{transition:opacity .15s}
+svg[data-filter] .seg{opacity:.16}
+svg[data-filter="cpu"] .seg-cpu,svg[data-filter="io"] .seg-io,svg[data-filter="lock"] .seg-lock,
+svg[data-filter="net"] .seg-net,svg[data-filter="mem"] .seg-mem,svg[data-filter="other"] .seg-other{opacity:1}
+.mk line{stroke:var(--ink);stroke-dasharray:3 3;opacity:.6}
+.mk text{fill:var(--ink);font:600 11px var(--font-body)}
+.mk.fix line{stroke:var(--good);opacity:1}
+.mk.fix text{fill:var(--good)}
+.selrect{fill:none;stroke:var(--ink);stroke-width:1.5}
+.hit{fill:transparent;cursor:crosshair}
+.readout{margin-top:10px;padding:10px 12px;background:var(--surface-2);border-radius:8px;font-size:14px;min-height:62px}
+.readout .rt{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px}
+.readout .rt span{color:var(--muted)}
+.rc{display:flex;flex-wrap:wrap;gap:4px 14px}
+.rchip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-variant-numeric:tabular-nums}
+.trend-line{fill:none;stroke:var(--ink);stroke-width:2}
+.trend-area{fill:var(--ink);opacity:.07}
+.trend-base{stroke:var(--muted);stroke-dasharray:4 4}
+.trend-lab{fill:var(--muted);font:11px var(--font-mono)}
+.callout{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:14px;border:1px solid var(--line);background:var(--surface-2)}
+.callout.bad{border-color:var(--bad);background:var(--bad-bg)}
+.callout.good{border-color:var(--good);background:var(--good-bg)}
+
+/* top sql */
+.tablewrap{overflow-x:auto;margin:0 -4px}
+table.sql{width:100%;min-width:660px;border-collapse:collapse}
+.sql th{font:500 11px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.sql th .th{background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;cursor:pointer}
+.sql th .th.on{color:var(--ink)}
+.sql td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.sql tbody tr{cursor:pointer}
+.sql tbody tr:hover{background:var(--surface-2)}
+.sql tbody tr.sel{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--ink)}
+.sql td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.rowbtn{display:grid;gap:3px;background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer;max-width:100%;min-width:0;width:100%}
+.rowbtn .top1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rowbtn .lbl{font-weight:600}
+.rowbtn .one{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;display:block}
+.wbar{height:6px;border-radius:3px;background:var(--line);margin-bottom:4px;min-width:90px}
+.wbar i{display:block;height:100%;border-radius:3px}
+.wv{font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.detail{margin-top:16px;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.dh{display:flex;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
+.dh h3{font-size:18px}
+.dact{display:flex;gap:8px;flex-wrap:wrap}
+.sqlbox{margin:0 0 14px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font:13px/1.55 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.kw{color:var(--w-mem);font-weight:500}
+.pm{color:var(--w-cpu)}
+.mixlab{font-size:13px;color:var(--muted);margin-bottom:6px}
+.mix{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--line)}
+.mix i{display:block;height:100%}
+.mixleg{display:flex;gap:4px 14px;flex-wrap:wrap;margin-top:8px;font-size:13px}
+
+/* plan */
+.plan-head{display:flex;justify-content:space-between;gap:10px 16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px}
+.plan-head h3{font-size:18px}
+.seg-ctl{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg-ctl button{border:0;background:var(--surface);color:var(--muted);font:600 13px var(--font-body);padding:7px 12px;cursor:pointer}
+.seg-ctl button[aria-pressed="true"]{background:var(--btn);color:var(--btn-ink)}
+.plan{display:grid;gap:8px}
+.node{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:6px 14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);margin-left:calc(var(--d)*24px);position:relative}
+.node:not([data-d="0"])::before{content:"\21B3";position:absolute;left:-18px;top:9px;color:var(--faint)}
+.node.hot{border-color:var(--bad);background:var(--bad-bg)}
+.node .flag{display:inline-block;margin-top:6px;font:600 12px var(--font-body);color:var(--bad)}
+.node .note{margin-top:4px;font-size:13px;color:var(--muted)}
+.nc{text-align:right}
+.nc .cv{font:600 13px var(--font-mono)}
+.cost{height:6px;border-radius:3px;background:var(--line);margin-top:4px}
+.cost i{display:block;height:100%;border-radius:3px;background:var(--ink)}
+.node.hot .cost i{background:var(--bad)}
+
+/* blocking */
+.sess{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 12px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.sess.lead{border-color:var(--bad);background:var(--bad-bg)}
+.sid{font:600 13px var(--font-mono);padding-top:2px}
+.sess pre{margin:6px 0 0;font:12px/1.5 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted)}
+.victims{margin:10px 0 0 22px;padding-left:16px;border-left:2px solid var(--line);display:grid;gap:8px}
+.victims .sess{grid-template-columns:auto minmax(0,1fr)}
+
+/* advisor */
+.rec{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);display:grid;gap:6px}
+.rec+.rec{margin-top:10px}
+.rec h4{font:700 16px var(--font-display);margin:0}
+.rec .gain{font-size:13px;font-weight:600}
+
+/* case file */
+.case{display:grid;gap:12px}
+.box{padding:14px 16px}
+.box h3{font-size:15px;margin-bottom:8px}
+.ticket{padding:16px}
+.ticket h2{font-size:21px;line-height:1.15;margin:8px 0 6px}
+.ticket p{font-size:14px;color:var(--muted)}
+.pick{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.opts{display:grid;gap:8px}
+.opt{display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--surface);font-size:14px}
+.opt.sel{border-color:var(--ink);background:var(--surface-2)}
+.opt input{margin:3px 0 0}
+.msg{padding:10px 12px;border-radius:8px;font-size:14px;border:1px solid var(--line)}
+.msg.bad{border-color:var(--bad);background:var(--bad-bg)}
+.hint{font-size:14px;padding:8px 10px;background:var(--warn-bg);border-radius:8px;margin-bottom:8px}
+.hint b{font-weight:600}
+.explored{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);margin-top:10px}
+.explored .sq{display:flex;gap:4px}
+.explored .sq i{width:14px;height:6px;border-radius:2px;background:var(--line)}
+.explored .sq i.on{background:var(--good)}
+
+/* result */
+.result{padding:18px}
+.stamp{display:inline-block;border:3px solid var(--good);color:var(--good);padding:3px 12px;border-radius:6px;font:800 22px var(--font-display);letter-spacing:.14em;text-transform:uppercase;transform:rotate(-5deg);margin:2px 0 14px;animation:stamp .45s cubic-bezier(.2,1.5,.4,1) both}
+@keyframes stamp{from{transform:rotate(-5deg) scale(2.4);opacity:0}to{transform:rotate(-5deg) scale(1);opacity:1}}
+.result h3{font-size:20px;margin-bottom:6px}
+.result p{font-size:14px}
+table.score{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+.score td{padding:5px 0;border-bottom:1px solid var(--line)}
+.score td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.score tr.total td{border-bottom:0;border-top:2px solid var(--ink);font:700 18px var(--font-display);padding-top:8px}
+.score .neg{color:var(--bad)} .score .pos{color:var(--good)}
+.lesson{margin-bottom:14px}
+
+/* final */
+.final{max-width:860px;margin:0 auto}
+.final-hero{padding:28px;margin-bottom:16px}
+.final-hero h1{font-size:clamp(30px,5vw,48px);font-weight:800;line-height:1.05;margin:8px 0 6px}
+.bigscore{font:800 clamp(48px,9vw,84px)/1 var(--font-display);font-variant-numeric:tabular-nums;margin:12px 0 4px}
+.final-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-bottom:16px}
+.final .box h3{font-size:17px;margin-bottom:10px}
+.lvrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.lvrow:last-child{border-bottom:0}
+.lvrow b{font-variant-numeric:tabular-nums}
+.trow{padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.trow:last-child{border-bottom:0}
+.trow .pill{margin-left:6px}
+
+@media (max-width:960px){
+  .play-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:880px){
+  .intro{grid-template-columns:minmax(0,1fr)}
+  .features{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .final-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .vitals{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .vit{border-bottom:1px solid var(--line)}
+  .vit:nth-child(2n){border-right:0}
+  .vit:last-child{grid-column:1/-1;border-bottom:0;border-right:0}
+  .facts{grid-template-columns:minmax(0,1fr)}
+  .facts div{border-right:0;border-bottom:1px solid var(--line)}
+  .facts div:last-child{border-bottom:0}
+  .node{margin-left:calc(var(--d)*12px);grid-template-columns:minmax(0,1fr) 84px}
+  .node:not([data-d="0"])::before{left:-13px}
+  .brief{padding:18px}
+}
+@media (max-width:560px){
+  .features{grid-template-columns:minmax(0,1fr)}
+  .panel{padding:14px}
+  .sess{grid-template-columns:auto minmax(0,1fr)}
+  .sess .btn{grid-column:1/-1}
+}
+@media (prefers-reduced-motion: reduce){
+  .tab.nudge,.stamp{animation:none}
+  .seg{transition:none}
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="2" y="14" width="5" height="10" rx="1" fill="var(--w-cpu)"/><rect x="10" y="8" width="5" height="16" rx="1" fill="var(--w-io)"/><rect x="18" y="2" width="5" height="22" rx="1" fill="var(--w-lock)"/></svg>
+      Slow Query Detective
+    </div>
+    <div class="topr">
+      <div class="prog" id="prog" hidden>
+        <span id="ptxt">Incident 1 of 3</span>
+        <span class="pips" id="pips"></span>
+        <span><b id="ptotal">0</b> pts</span>
+      </div>
+      <button class="btn sound" id="snd" data-act="sound" aria-pressed="true" aria-label="Sound effects"></button>
+    </div>
+  </header>
+
+  <main>
+    <section id="s-intro">
+      <div class="intro">
+        <div>
+          <div class="eyebrow">Interactive demo &middot; about 6 minutes</div>
+          <h1>Slow Query Detective</h1>
+          <p class="lede">Three production databases are in trouble. Read the wait-time charts, rank the SQL, open the plans, trace the locks, and fix the right thing before the incident costs you more.</p>
+          <div class="cta">
+            <button class="btn primary big" data-act="start">Take the first call</button>
+            <span class="muted sm" id="best-line">No setup. Faster, cleaner runs score higher.</span>
+          </div>
+        </div>
+        <div class="card hero-chart">
+          <div class="eyebrow" style="margin-bottom:8px">Sessions waiting, last 6 hours</div>
+          <div id="intro-chart" class="chart"></div>
+          <div class="legend" id="intro-legend" style="margin-top:10px"></div>
+          <p class="cap">Checkout slows down at 13:20. One wait type explodes. That is where every investigation starts.</p>
+        </div>
+      </div>
+      <h2 class="sec-title">Your toolkit</h2>
+      <div class="features" id="features"></div>
+      <p class="sm" id="reset-best" style="margin-top:22px" hidden><button class="link" data-act="resetbest">Reset best score</button></p>
+      <p class="muted sm" style="margin-top:22px">Want this on your own databases? <a href="https://try.solarwinds.com/solarwinds-observability-self-hosted-free-trial?utm_source=slow-query-detective&amp;utm_medium=demo&amp;utm_campaign=sqd-game" target="_blank" rel="noopener" style="color:inherit">Start a free trial of SolarWinds Observability Self-Hosted</a>.</p>
+    </section>
+
+    <section id="s-brief" hidden></section>
+    <section id="s-play" hidden></section>
+    <section id="s-final" hidden></section>
+  </main>
+</div>
+<div class="idle" id="idle" role="status" aria-live="polite" hidden>Still there? Starting over in <b id="idle-s">15</b>s. Tap or move to keep playing.</div>
+
+<script>
+(function(){
+'use strict';
+
+const TRIAL_URL='https://try.solarwinds.com/solarwinds-observability-self-hosted-free-trial?utm_source=slow-query-detective&utm_medium=demo&utm_campaign=sqd-game';
+/* ---------- helpers ---------- */
+const $=(s,r)=>(r||document).querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const money=n=>'$'+fmt(n);
+const mmss=ms=>{const s=Math.floor(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
+function fmtMs(ms){
+  if(ms<1000) return (ms<10?ms.toFixed(1).replace(/\.0$/,''):String(Math.round(ms)))+' ms';
+  if(ms<60000){const s=ms/1000;return (s<10?s.toFixed(1).replace(/\.0$/,''):String(Math.round(s)))+' s';}
+  return (ms/60000).toFixed(1).replace(/\.0$/,'')+' min';
+}
+const KW=/\b(SELECT|FROM|WHERE|AND|ORDER BY|GROUP BY|JOIN|ON|UPDATE|SET|INSERT INTO|VALUES|DESC|LIKE|SUM)\b/g;
+const sqlHtml=s=>esc(s).replace(KW,'<span class="kw">$1</span>').replace(/(@\w+)/g,'<span class="pm">$1</span>');
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const RM=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+function tween(ms,fn,done){
+  if(RM){fn(1);if(done)done();return;}
+  const t0=performance.now();
+  (function f(now){const p=Math.min(1,(now-t0)/ms);fn(1-Math.pow(1-p,3));if(p<1)requestAnimationFrame(f);else if(done)done();})(t0);
+}
+
+/* ---------- sound (synthesized, no audio files) ---------- */
+const Sfx=(function(){
+  let ctx=null,master=null,on=true;
+  try{on=localStorage.getItem('sqd-sound')!=='off';}catch(e){}
+  function ensure(){
+    if(!on)return false;
+    if(!ctx){
+      try{
+        const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
+        ctx=new AC();master=ctx.createGain();master.gain.value=.5;
+        const comp=ctx.createDynamicsCompressor();master.connect(comp);comp.connect(ctx.destination);
+      }catch(e){ctx=null;return false;}
+    }
+    if(ctx.state==='suspended'){try{ctx.resume();}catch(e){}}
+    return true;
+  }
+  function tone(f,d,o){
+    o=o||{};const t=ctx.currentTime+(o.at||0),osc=ctx.createOscillator(),g=ctx.createGain(),v=o.vol==null?.2:o.vol;
+    osc.type=o.type||'sine';osc.frequency.setValueAtTime(f,t);
+    if(o.to)osc.frequency.exponentialRampToValueAtTime(o.to,t+d);
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+(o.atk||.005));g.gain.exponentialRampToValueAtTime(.0001,t+d);
+    if(o.lp){const bf=ctx.createBiquadFilter();bf.type='lowpass';bf.frequency.value=o.lp;osc.connect(bf);bf.connect(g);}else osc.connect(g);
+    g.connect(master);osc.start(t);osc.stop(t+d+.03);
+  }
+  function thud(at){
+    tone(150,.3,{type:'sine',to:42,vol:.5,at:at});
+    const n=Math.floor(ctx.sampleRate*.09),buf=ctx.createBuffer(1,n,ctx.sampleRate),d=buf.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);
+    const src=ctx.createBufferSource(),g=ctx.createGain(),bf=ctx.createBiquadFilter();
+    bf.type='lowpass';bf.frequency.value=1200;g.gain.value=.3;src.buffer=buf;src.connect(bf);bf.connect(g);g.connect(master);src.start(ctx.currentTime+at);
+  }
+  const N={C5:523.25,E5:659.25,G5:783.99,C6:1046.5,E6:1318.5,G6:1568};
+  const defs={
+    tick:()=>tone(700,.045,{type:'triangle',to:520,vol:.14}),
+    tab:()=>{tone(480,.05,{type:'triangle',vol:.14});tone(720,.07,{type:'triangle',vol:.12,at:.035});},
+    select:()=>{tone(880,.07,{vol:.16});tone(1320,.09,{vol:.1,at:.045});},
+    lock:()=>{tone(330,.09,{type:'square',vol:.09,lp:1800});tone(495,.12,{type:'square',vol:.09,lp:1800,at:.07});tone(660,.22,{type:'triangle',vol:.16,at:.14});},
+    hint:()=>{tone(988,.28,{vol:.14});tone(1319,.38,{vol:.12,at:.1});},
+    begin:()=>{tone(220,.26,{type:'sawtooth',to:880,vol:.07,lp:2000});tone(660,.14,{type:'triangle',vol:.14,at:.2});},
+    wrong:()=>{tone(196,.24,{type:'sawtooth',vol:.15,lp:700});tone(147,.4,{type:'sawtooth',to:131,vol:.15,lp:600,at:.18});},
+    win:()=>{
+      [N.C5,N.E5,N.G5,N.C6].forEach((f,i)=>tone(f,.22,{type:'triangle',vol:.2,at:i*.09}));
+      thud(.42);
+      tone(N.E6,.5,{vol:.14,at:.45});tone(N.G6,.7,{vol:.1,at:.5});
+    },
+    fanfare:()=>{
+      [N.C5,N.E5,N.G5,N.C6].forEach((f,i)=>tone(f,.2,{type:'triangle',vol:.2,at:i*.12}));
+      [N.C5,N.E5,N.G5,N.C6].forEach(f=>tone(f,1.1,{type:'triangle',vol:.13,at:.55}));
+      tone(N.E6,1.2,{vol:.1,at:.6});
+    }
+  };
+  return {
+    play:function(name){if(!ensure())return;try{defs[name]();}catch(e){}},
+    isOn:function(){return on;},
+    toggle:function(){on=!on;try{localStorage.setItem('sqd-sound',on?'on':'off');}catch(e){}return on;}
+  };
+})();
+function updateSnd(){
+  const b=$('#snd');if(!b)return;
+  const on=Sfx.isOn();
+  b.setAttribute('aria-pressed',String(on));
+  b.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h2.5L8 3v10L4.5 10H2z" fill="currentColor"/>'+(on?'<path d="M10.5 5.5a3.5 3.5 0 0 1 0 5"/><path d="M12.5 3.5a6.5 6.5 0 0 1 0 9"/>':'<path d="M10.5 6l4 4M14.5 6l-4 4"/>')+'</svg>'+(on?'Sound on':'Sound off');
+}
+
+/* ---------- domain data ---------- */
+const KEYS=['cpu','io','lock','net','mem','other'];
+const WN={cpu:'CPU',io:'Disk I/O',lock:'Locks',net:'Network',mem:'Memory',other:'Other'};
+const N=36;
+const tlabel=i=>{const m=9*60+i*10;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+
+const TOOLS=[
+  {k:'wait',name:'Wait Time',desc:'See where database time goes, by wait type, across the last six hours.',sel:false},
+  {k:'sql',name:'Top SQL',desc:'Rank statements by the time they spend waiting. Select one to inspect it.',sel:false},
+  {k:'plan',name:'Plan',desc:'Open the execution plan for the selected statement and find the costly step.',sel:true},
+  {k:'blocking',name:'Blocking',desc:'Trace waiting sessions back to the session holding the lock.',sel:false},
+  {k:'trend',name:'Trend',desc:'Compare the selected statement with its own baseline over 48 hours.',sel:true},
+  {k:'advice',name:'Advisor',desc:'Get tuning recommendations for the selected statement.',sel:true}
+];
+const TOOLWHY={
+  wait:'Shows which wait type grew, so you know what kind of problem you have before reading any SQL.',
+  sql:'Ranks statements by time spent waiting, so the worst offenders float to the top.',
+  plan:'Shows the exact step that burns the time, such as a full table scan or a bad join.',
+  blocking:'Turns a pile of waiting sessions into one chain with a single lead blocker.',
+  trend:'Compares each statement with its own history, so steady heavy hitters stop looking like suspects.',
+  advice:'Turns a diagnosis into a concrete change, with an estimate of the payoff.'
+};
+
+const seekP=(obj,rows)=>[{d:0,op:'Select',obj:'',rows:'',cost:0},{d:1,op:'Index seek',obj:obj,rows:rows||'1 row',cost:100}];
+const updP=(tbl,idx)=>[{d:0,op:'Update',obj:tbl,rows:'1 row changed',cost:35},{d:1,op:'Index seek',obj:idx,rows:'1 row',cost:65}];
+const insP=tbl=>[{d:0,op:'Insert',obj:tbl,rows:'1 row',cost:100}];
+
+const LEVELS=[
+{
+  id:'INC-4821',pri:'P1',title:'Checkout is crawling',
+  alert:'Checkout latency is up 14x. Orders are timing out at the payment step.',
+  story:'The marketing team sent the Black Friday email 20 minutes ago. Traffic is up, but the database should cope. The app team says nothing was deployed. Find the cause.',
+  facts:[['Alert','Avg response 1,260 ms (normal 90 ms)'],['Affected','Checkout, cart, order history'],['Database','orders-prod-01, 4.2M orders']],
+  rate:2400,seed:11,start:26,fixAt:32,
+  incident:{io:{add:32},mem:{add:1.6}},
+  markers:[{at:25,label:'Promo email sent'}],
+  trendMarkers:[{at:44,label:'Promo email sent'}],
+  vitals:{resp:[1260,85],base:90},
+  key:'plan',keyNeedsCulprit:true,culprit:'q1',
+  stmts:[
+    {id:'q1',label:'Open orders by customer',app:'checkout-api',
+     sql:"SELECT o.order_id, o.total, o.status\nFROM orders o\nWHERE o.customer_id = @cust\n  AND o.status = 'OPEN'\nORDER BY o.created_at DESC",
+     execs:18400,avgMs:134,mix:{io:.93,cpu:.05,mem:.02},trend:{base:22,drift:1.5,at:44,to:134},
+     plan:[{d:0,op:'Select',obj:'',rows:'37 rows returned',cost:0},{d:1,op:'Sort',obj:'created_at DESC',rows:'37 rows',cost:4},{d:2,op:'Table scan',obj:'orders',rows:'4,218,330 rows read, 37 kept',cost:96,flag:'Full table scan',note:'No index covers customer_id and status, so every call reads the whole table.'}],
+     advice:[{tag:'Index',title:'Create an index on orders (customer_id, status)',detail:'Every call reads all 4.2M rows to return a few dozen. An index on the two filter columns turns the scan into a seek.',gain:'About 96% less I/O for this statement'},{tag:'Query',title:'Return only the columns you need',detail:'The sort adds a small cost. Low priority until the scan is gone.',gain:'About 3% less CPU'}]},
+    {id:'q2',label:'Category sales export',app:'analytics-export',
+     sql:"SELECT p.category, SUM(oi.qty * oi.price)\nFROM order_items oi\nJOIN products p ON p.id = oi.product_id\nGROUP BY p.category",
+     execs:90,avgMs:4100,mix:{cpu:.6,io:.3,mem:.1},trend:{base:3900,drift:1.05},
+     plan:[{d:0,op:'Select',obj:'',rows:'',cost:0},{d:1,op:'Hash aggregate',obj:'GROUP BY category',rows:'14 rows',cost:18},{d:2,op:'Hash join',obj:'order_items, products',rows:'9.6M rows',cost:34},{d:3,op:'Index scan',obj:'ix_order_items_product',rows:'9,640,112 rows',cost:41,note:'Reads every order line by design. Same shape as last week.'},{d:3,op:'Index seek',obj:'pk_products',rows:'8,200 rows',cost:7}],
+     advice:[{tag:'Schedule',title:'Move this export off peak',detail:'It is 11% of waiting right now and runs the same as every other day. Worth moving later, not the cause today.',gain:'About 11% fewer waits at peak'}],
+     verdict:'The export is steady and only about 11% of waiting.'},
+    {id:'q3',label:'Session heartbeat',app:'session-service',sql:"UPDATE sessions\nSET last_seen = @ts\nWHERE token = @token",
+     execs:61000,avgMs:3.1,mix:{cpu:.5,lock:.2,net:.3},trend:{base:3,drift:1.02},plan:updP('sessions','pk_sessions (token)'),advice:[]},
+    {id:'q4',label:'Product by SKU',app:'catalog-api',sql:"SELECT * FROM products\nWHERE sku = @sku",
+     execs:52000,avgMs:2.2,mix:{cpu:.7,mem:.3},trend:{base:2.1,drift:1.03},plan:seekP('pk_products (sku)'),advice:[]},
+    {id:'q5',label:'Audit log insert',app:'checkout-api',sql:"INSERT INTO audit_log (user_id, action, at)\nVALUES (@u, @a, @t)",
+     execs:30000,avgMs:3.4,mix:{io:.7,net:.3},trend:{base:3.3,drift:1.03},plan:insP('audit_log'),advice:[]},
+    {id:'q6',label:'Price lookup',app:'pricing-service',sql:"SELECT price FROM price_list\nWHERE product_id = @p",
+     execs:44000,avgMs:1.1,mix:{cpu:.8,mem:.2},trend:{base:1.1,drift:1.02},plan:seekP('ix_price_product'),advice:[]}
+  ],
+  blocking:null,
+  noBlock:'No blocking chains in this window. The longest lock wait was 4 ms, so locks are not the problem here.',
+  fixes:[
+    {id:'f1',ok:true,title:'Add an index on orders (customer_id, status)',win:'The scan becomes a seek. Each call now touches a few dozen rows instead of 4.2M, and Disk I/O waits fall back to normal within a minute.'},
+    {id:'f2',title:'Add 64 GB of memory',why:'More cache hides some reads for a while, but every call still reads 4.2M rows. The waits move around and the cost stays.'},
+    {id:'f3',title:'Restart the database service',why:'A restart throws away the warm cache, so the next few minutes are slower. The scan is still there afterwards.'},
+    {id:'f4',title:'Stop the analytics export',why:'The export is about 11% of waiting. Stopping it barely changes checkout.'},
+    {id:'f5',title:'Double the connection pool',why:'More sessions pile onto the same slow statement. Waiting sessions go up, not down.'}
+  ],
+  hints:[
+    {tab:'wait',text:'Open Wait Time. Which color grew when the alert fired?'},
+    {tab:'sql',text:'Disk I/O is most of the waiting. In Top SQL, find the statement that spends most of its time on I/O, then open its plan.'},
+    {tab:'plan',text:'The orders lookup reads the whole table to find a few rows. It needs an index on the columns it filters by.'}
+  ],
+  lesson:'The wait breakdown showed I/O before you opened any SQL, and the plan showed a full table scan. Wait-time analysis narrows hundreds of statements down to one.'
+},
+{
+  id:'INC-4833',pri:'P1',title:'Everything froze at 1:30 PM',
+  alert:'Orders and stock checks hang, then time out. CPU looks fine.',
+  story:'Support tickets arrived within a minute of each other. App threads are stuck waiting on the database. A bulk stock sync was moved to the afternoon this week. Nobody deployed code.',
+  facts:[['Alert','Avg response 3,850 ms (normal 85 ms)'],['Affected','Checkout, stock checks, order entry'],['Database','inventory-prod-02, CPU 14%']],
+  rate:6100,seed:23,start:27,fixAt:32,
+  incident:{lock:{add:38},cpu:{scale:.55},io:{scale:.6}},
+  markers:[{at:27,label:'Stock sync starts'}],
+  trendMarkers:[{at:44,label:'Stock sync starts'}],
+  vitals:{resp:[3850,80],base:85},
+  key:'blocking',keyNeedsCulprit:false,culprit:'b',
+  stmts:[
+    {id:'s1',label:'Reserve stock',app:'checkout-api',sql:"UPDATE inventory\nSET reserved = reserved + @n\nWHERE sku = @sku",
+     execs:9800,avgMs:310,mix:{lock:.94,cpu:.04,io:.02},trend:{base:6,drift:1.02,at:44,to:310},plan:updP('inventory','pk_inventory (sku)'),
+     verdict:'This statement is a victim. 94% of its time is lock waiting on rows another session holds.',
+     advice:[{tag:'Blocking',title:'94% of this statement\'s time is lock waiting',detail:'Another session holds locks on rows this statement needs. Open Blocking to see who.',gain:'Clears once the blocker is resolved'}]},
+    {id:'s2',label:'Stock check',app:'catalog-api',sql:"SELECT stock FROM inventory\nWHERE sku = @sku",
+     execs:22000,avgMs:120,mix:{lock:.9,cpu:.06,net:.04},trend:{base:2,drift:1.02,at:44,to:120},plan:seekP('pk_inventory (sku)'),
+     verdict:'This statement is a victim. It reads rows that are locked by another session.',
+     advice:[{tag:'Blocking',title:'Reads are waiting on locked rows',detail:'The query is fast on its own. It is stuck behind a writer. Open Blocking to find the writer.',gain:'Clears once the blocker is resolved'}]},
+    {id:'s3',label:'Insert order line',app:'order-service',sql:"INSERT INTO order_lines (order_id, sku, qty)\nVALUES (@o, @sku, @q)",
+     execs:7400,avgMs:210,mix:{lock:.88,io:.08,cpu:.04},trend:{base:4,drift:1.02,at:44,to:210},plan:insP('order_lines'),
+     verdict:'This statement is a victim. The insert checks inventory rows and waits on a lock.',
+     advice:[{tag:'Blocking',title:'Insert is waiting on an inventory lock',detail:'The foreign key check touches a locked inventory row. Find the session holding it.',gain:'Clears once the blocker is resolved'}]},
+    {id:'b',label:'Nightly stock sync',app:'stock-sync',sql:"UPDATE inventory\nSET stock = stock + s.qty\nFROM staging_stock s\nWHERE inventory.sku = s.sku",
+     execs:1,avgMs:870000,mix:{io:.55,cpu:.4,net:.05},trend:{base:130000,drift:1,at:44,to:870000},
+     plan:[{d:0,op:'Update',obj:'inventory',rows:'2,100,000 rows in one transaction',cost:71,flag:'Long transaction',note:'Row locks escalate to a table lock after 5,000 rows and stay until commit.'},{d:1,op:'Hash join',obj:'staging_stock',rows:'2.1M rows',cost:18},{d:2,op:'Table scan',obj:'staging_stock',rows:'2,100,000 rows',cost:11}],
+     advice:[{tag:'Transactions',title:'One transaction updates 2.1M rows and stays open',detail:'The sync has held row locks for 14 minutes and escalated to a table lock. Commit in batches of a few thousand rows so locks release quickly.',gain:'Lock hold time drops from minutes to under a second'},{tag:'Index',title:'Add an index on staging_stock (sku)',detail:'Saves a little scan time. Not the cause of the pile-up.',gain:'About 6% faster sync'}]},
+    {id:'s5',label:'Customer lookup',app:'crm-sync',sql:"SELECT name, email FROM customers\nWHERE id = @id",
+     execs:15000,avgMs:2.4,mix:{cpu:.7,mem:.3},trend:{base:2.3,drift:1.02},plan:seekP('pk_customers'),advice:[]},
+    {id:'s6',label:'Product search',app:'search-api',sql:"SELECT sku, title FROM products\nWHERE title LIKE @q",
+     execs:6000,avgMs:9,mix:{cpu:.6,io:.2,mem:.2},trend:{base:9,drift:1.04},plan:seekP('ix_products_title','120 rows'),advice:[]}
+  ],
+  blocking:{
+    lead:{sid:214,app:'stock-sync',user:'svc_stock_sync',held:'14m 32s',blocks:38,sql:'UPDATE inventory SET stock = stock + s.qty FROM staging_stock s ...',stmt:'b'},
+    victims:[
+      {sid:301,app:'checkout-api',waited:'6m 12s',sql:'UPDATE inventory SET reserved = reserved + @n ...'},
+      {sid:307,app:'catalog-api',waited:'5m 58s',sql:'SELECT stock FROM inventory WHERE sku = @sku'},
+      {sid:311,app:'order-service',waited:'5m 40s',sql:'INSERT INTO order_lines (order_id, sku, qty) ...'},
+      {sid:318,app:'checkout-api',waited:'5m 31s',sql:'UPDATE inventory SET reserved = reserved + @n ...'},
+      {sid:322,app:'catalog-api',waited:'5m 02s',sql:'SELECT stock FROM inventory WHERE sku = @sku'},
+      {sid:329,app:'checkout-api',waited:'4m 47s',sql:'UPDATE inventory SET reserved = reserved + @n ...'}
+    ],more:32
+  },
+  fixes:[
+    {id:'f1',ok:true,title:'Resolve session 214 and commit the sync in small batches',win:'Session 214 releases its locks, the 38 blocked sessions drain in seconds, and the rewritten sync commits every 5,000 rows so it cannot stall checkout again.'},
+    {id:'f2',title:'Add an index on inventory (sku)',why:'The blocked statements already seek on sku. Their time is lock waiting, not reading.'},
+    {id:'f3',title:'Raise the lock timeout to 60 seconds',why:'Sessions would wait longer before giving up. The queue gets longer, not shorter.'},
+    {id:'f4',title:'Add CPU cores',why:'CPU is at 14%. Sessions are waiting on a lock, not on processor time.'},
+    {id:'f5',title:'Terminate the 38 blocked sessions',why:'They are victims. They reconnect and queue behind the same lock seconds later.'}
+  ],
+  hints:[
+    {tab:'wait',text:'Check Wait Time. The new waits are Locks, not CPU or I/O. Something is holding locks.'},
+    {tab:'blocking',text:'Open Blocking. The statements at the top of Top SQL are waiting on someone. Find who.'},
+    {tab:'blocking',text:'Session 214 sits at the head of the chain. Mark it as the culprit, then fix the cause.'}
+  ],
+  lesson:'The three statements at the top of Top SQL were victims. The blocking tree pointed at the single session holding the locks, which ranked fourth.'
+},
+{
+  id:'INC-4840',pri:'P2',title:'The slow burn',
+  alert:'API latency has doubled and CPU is pinned at 92%. No errors, just slow.',
+  story:'Release 4.18.2 went out at 12:40. Since then CPU has crept to the ceiling and the shipment tracking page feels sluggish. The team insists the release did not touch any SQL.',
+  facts:[['Alert','Avg response 840 ms (normal 70 ms)'],['Affected','Shipment tracking, carrier API'],['Database','logistics-prod-03, CPU 92%']],
+  rate:1350,seed:37,start:22,fixAt:32,
+  incident:{cpu:{add:24}},
+  markers:[{at:22,label:'Release 4.18.2'}],
+  trendMarkers:[{at:44,label:'Release 4.18.2'}],
+  vitals:{resp:[840,68],base:70},
+  key:'trend',keyNeedsCulprit:true,culprit:'r2',
+  stmts:[
+    {id:'r1',label:'Carrier invoice rollup',app:'billing-batch',sql:"SELECT c.carrier_id, SUM(i.amount)\nFROM invoice_lines i\nJOIN carriers c ON c.id = i.carrier_id\nGROUP BY c.carrier_id",
+     execs:12,avgMs:290000,mix:{cpu:.55,io:.4,mem:.05},trend:{base:285000,drift:1.0},
+     plan:[{d:0,op:'Select',obj:'',rows:'',cost:0},{d:1,op:'Hash aggregate',obj:'GROUP BY carrier_id',rows:'31 rows',cost:22},{d:2,op:'Hash join',obj:'invoice_lines, carriers',rows:'48M rows',cost:31},{d:3,op:'Index scan',obj:'ix_invoice_lines_carrier',rows:'48,012,330 rows',cost:41,note:'Reads every invoice line by design.'},{d:3,op:'Index seek',obj:'pk_carriers',rows:'31 rows',cost:6}],
+     verdict:'It is big, but it ran this long yesterday and last week too.',
+     advice:[{tag:'Baseline',title:'Heavy, but unchanged',detail:'This rollup runs 12 times an hour and has taken about 4.8 minutes per run for the past 30 days. Nothing changed here.',gain:'No action needed'}]},
+    {id:'r2',label:'Shipments by region',app:'tracking-api',
+     sql:"SELECT s.shipment_id, s.status, c.name\nFROM shipments s\nJOIN carriers c ON c.id = s.carrier_id\nWHERE s.region = @region\n  AND s.ship_date >= @from\nORDER BY s.ship_date DESC",
+     execs:6200,avgMs:410,mix:{cpu:.9,mem:.07,io:.03},trend:{base:29,drift:1.0,at:44,to:410},markerLabel:'Release 4.18.2, plan changed',
+     plan:[{d:0,op:'Select',obj:'',rows:'',cost:0},{d:1,op:'Sort',obj:'ship_date DESC',rows:'1,940,000 rows',cost:9},{d:2,op:'Nested loops',obj:'shipments, carriers',rows:'1,940,000 rows',cost:6},{d:3,op:'Index scan',obj:'ix_shipments_ship_date',rows:'est. 12, actual 1,940,000',cost:79,flag:'Estimate off by 160,000x',note:'Compiled for a rare region value, then reused for common ones. It reads far more than it needs.'},{d:3,op:'Index seek',obj:'pk_carriers',rows:'1 row per loop',cost:6}],
+     planPrev:[{d:0,op:'Select',obj:'',rows:'',cost:0},{d:1,op:'Nested loops',obj:'shipments, carriers',rows:'388 rows',cost:6},{d:2,op:'Index seek',obj:'ix_shipments_region_date',rows:'est. 410, actual 388',cost:88,note:'Seeks straight to the region and date range. No sort needed because the index is already in order.'},{d:2,op:'Index seek',obj:'pk_carriers',rows:'1 row per loop',cost:6}],
+     planMeta:{cur:'Plan 91fa3c, in use since 12:40',prev:'Plan 7be204, used until 12:40'},
+     advice:[{tag:'Plan change',title:'Plan changed at 12:40 and this statement is 14x slower',detail:'It now scans an index sized for a rare region and reads 1.9M rows. The previous plan seeked on (region, ship_date) and ran in about 29 ms.',gain:'Back to about 29 ms per call'},{tag:'Statistics',title:'Statistics on shipments are stale',detail:'They were last updated 9 days ago, while 1.2M rows were added. Refreshing them helps the optimizer choose well next time.',gain:'Makes a repeat less likely'}]},
+    {id:'r3',label:'Tracking events by shipment',app:'tracking-api',sql:"SELECT * FROM tracking_events\nWHERE shipment_id = @id\nORDER BY at",
+     execs:38000,avgMs:4,mix:{cpu:.6,io:.3,mem:.1},trend:{base:3.9,drift:1.03},plan:seekP('ix_events_shipment','12 rows'),advice:[]},
+    {id:'r4',label:'Update shipment status',app:'carrier-api',sql:"UPDATE shipments\nSET status = @s\nWHERE shipment_id = @id",
+     execs:9000,avgMs:6,mix:{cpu:.5,lock:.2,io:.3},trend:{base:5.8,drift:1.02},plan:updP('shipments','pk_shipments'),advice:[]},
+    {id:'r5',label:'Insert tracking event',app:'scanner-gateway',sql:"INSERT INTO tracking_events\n  (shipment_id, at, code)\nVALUES (@id, @t, @c)",
+     execs:41000,avgMs:2,mix:{io:.6,cpu:.3,net:.1},trend:{base:2,drift:1.02},plan:insP('tracking_events'),advice:[]},
+    {id:'r6',label:'Role lookup',app:'auth-service',sql:"SELECT role FROM users\nWHERE token = @t",
+     execs:52000,avgMs:.9,mix:{cpu:.8,mem:.2},trend:{base:.9,drift:1.01},plan:seekP('ix_users_token'),advice:[]}
+  ],
+  blocking:null,
+  noBlock:'No blocking chains in this window. Locks are not what is slowing the database down.',
+  fixes:[
+    {id:'f1',ok:true,title:'Pin the previous plan and refresh statistics on shipments',win:'The statement goes back to its seek on (region, ship_date). Average time falls from 410 ms to about 30 ms and CPU drops off within minutes. Fresh statistics make a repeat less likely.'},
+    {id:'f2',title:'Add CPU cores',why:'It spends money to run a plan that does 14x the work per call. At peak, CPU would still sit near the ceiling.'},
+    {id:'f3',title:'Stop the carrier invoice rollup',why:'It tops the list by total wait, but it runs the same as last month. Stopping it breaks billing and fixes nothing.'},
+    {id:'f4',title:'Add an index on shipments (region, ship_date)',why:'That index already exists. The optimizer stopped using it when the plan changed.'},
+    {id:'f5',title:'Restart the application servers',why:'The connection pool reconnects but the plan stays. CPU is back at the ceiling within minutes.'}
+  ],
+  hints:[
+    {tab:'wait',text:'CPU is the wait type that grew, starting at the release marker.'},
+    {tab:'trend',text:'The top statement is expected to be heavy. Open Trend for the second one and compare it with its own baseline.'},
+    {tab:'plan',text:'The tracking-api statement changed plans at 12:40. Compare the current and previous plan, then restore the fast one.'}
+  ],
+  lesson:'Ranking by total wait pointed at a job that has always been heavy. Comparing each statement with its own baseline exposed the one that changed 14x, and the plan view showed why.'
+}
+];
+
+/* ---------- derived data ---------- */
+const BASE={cpu:1.6,io:1.4,lock:.5,net:.9,mem:.7,other:.9};
+const tot=b=>KEYS.reduce((a,k)=>a+b[k],0);
+function initLevel(lv,li){
+  const r1=mulberry(lv.seed),r2=mulberry(lv.seed+99);
+  const calm=[],hot=[];
+  for(let i=0;i<N;i++){
+    const c={},h={},day=1+.12*Math.sin(i/N*Math.PI);
+    for(const k of KEYS){
+      const b=BASE[k]*day*(1+(r1()-.5)*.28);
+      c[k]=b;
+      let v=b;const inc=lv.incident[k];
+      if(inc&&i>=lv.start){
+        const r=Math.min(1,(i-lv.start+1)/2);
+        v=b*(1+((inc.scale||1)-1)*r)+(inc.add||0)*r*(1+(r2()-.5)*.14);
+      }
+      h[k]=v;
+    }
+    calm.push(c);hot.push(h);
+  }
+  lv.ser0=hot;
+  lv.ser1=hot.map((h,i)=>{
+    if(i<lv.fixAt)return h;
+    const k=Math.min(1,(i-lv.fixAt+1)/2),o={};
+    for(const key of KEYS)o[key]=h[key]+(calm[i][key]-h[key])*k;
+    return o;
+  });
+  lv.ymax=Math.ceil(Math.max.apply(null,hot.map(tot))*1.08/10)*10;
+  let sum=0;
+  lv.stmts.forEach(s=>{s.total=s.execs*s.avgMs/60000;sum+=s.total;});
+  lv.stmts.forEach((s,si)=>{
+    s.share=s.total/sum;
+    s.top=Object.keys(s.mix).sort((a,b)=>s.mix[b]-s.mix[a])[0];
+    const r=mulberry(lv.seed*7+si),t=s.trend,pts=[];
+    for(let i=0;i<48;i++){
+      let v=t.base*(1+((t.drift||1)-1)*(i/47));
+      v*=1+(r()-.5)*.1;
+      if(t.at!=null&&i>=t.at){const k=Math.min(1,(i-t.at+1)/2);v=v+(t.to-v)*k*(1+(r()-.5)*.06);}
+      pts.push(v);
+    }
+    s.pts=pts;
+    const head=pts.slice(0,40).sort((a,b)=>a-b);
+    s.baseline=head[20];
+  });
+  lv.wait0=Math.round(tot(lv.ser0[N-1]));
+  lv.wait1=Math.round(tot(lv.ser1[N-1]));
+}
+LEVELS.forEach(initLevel);
+
+/* ---------- state ---------- */
+const S={screen:'intro',lv:0,total:0,results:[],allTools:new Set(),L:null};
+const cur=()=>LEVELS[S.lv];
+const selStmt=()=>S.L&&S.L.suspect?cur().stmts.find(s=>s.id===S.L.suspect):null;
+function newLevel(){
+  const lv=cur();
+  return {t:0,wrong:0,hints:0,tools:new Set(),keyHit:false,suspect:null,culprit:null,fix:null,resolved:false,
+    tab:'wait',bucket:N-1,filter:null,planView:'cur',sortKey:'wait',sortDir:-1,msg:null,nudge:null,hintLog:[],result:null,
+    curSer:lv.ser0.map(b=>Object.assign({},b)),vShown:{resp:lv.vitals.resp[0],wait:lv.wait0}};
+}
+function loadBest(){try{return +localStorage.getItem('sqd-best')||0;}catch(e){return 0;}}
+function saveBest(v){try{localStorage.setItem('sqd-best',String(v));}catch(e){}}
+function clearBest(){try{localStorage.removeItem('sqd-best');}catch(e){}}
+
+/* ---------- charts ---------- */
+function drawWait(host,ser,lv,o){
+  const W=Math.max(280,Math.floor(host.clientWidth||600)),H=W<520?250:290;
+  const m={l:34,r:8,t:40,b:24},iw=W-m.l-m.r,ih=H-m.t-m.b,bw=iw/N;
+  const y=v=>m.t+ih-(v/lv.ymax)*ih;
+  let g='<g class="grid">';
+  for(let v=0;v<=lv.ymax;v+=10)g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+y(v)+'" y2="'+y(v)+'"/>';
+  g+='</g><g class="axis">';
+  for(let v=0;v<=lv.ymax;v+=10)g+='<text x="'+(m.l-6)+'" y="'+(y(v)+4)+'" text-anchor="end">'+v+'</text>';
+  for(let i=0;i<N;i+=6)g+='<text x="'+(m.l+(i+.5)*bw)+'" y="'+(H-6)+'" text-anchor="middle">'+tlabel(i)+'</text>';
+  g+='</g>';
+  for(let i=0;i<N;i++){
+    let acc=0;const x=m.l+i*bw;
+    for(const k of KEYS){
+      const v=ser[i][k];if(v<=0)continue;
+      const y1=y(acc+v),y0=y(acc);
+      g+='<rect class="seg seg-'+k+'" x="'+(x+1).toFixed(1)+'" y="'+y1.toFixed(1)+'" width="'+Math.max(1,bw-2).toFixed(1)+'" height="'+Math.max(0,y0-y1-.6).toFixed(1)+'"/>';
+      acc+=v;
+    }
+  }
+  const mk=(at,label,row,cls)=>{
+    const x=m.l+(at+.5)*bw,ty=row===1?13:28,anchor=(cls==='fix'||x>W*.62)?'end':'start',tx=anchor==='end'?x-5:x+5;
+    return '<g class="mk '+cls+'"><line x1="'+x+'" x2="'+x+'" y1="'+(ty+4)+'" y2="'+(m.t+ih)+'"/><text x="'+tx+'" y="'+ty+'" text-anchor="'+anchor+'">'+esc(label)+'</text></g>';
+  };
+  lv.markers.forEach(e=>{g+=mk(e.at,e.label,1,'');});
+  if(o.fixed)g+=mk(lv.fixAt,'Fix applied',2,'fix');
+  if(o.interactive){
+    g+='<rect class="selrect" x="'+(m.l+o.sel*bw)+'" y="'+m.t+'" width="'+bw+'" height="'+ih+'" rx="2"/>';
+    g+='<rect class="hit" x="'+m.l+'" y="'+m.t+'" width="'+iw+'" height="'+ih+'"/>';
+  }
+  host.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Stacked bars of sessions waiting by wait type over six hours"'+(o.filter?' data-filter="'+o.filter+'"':'')+'>'+g+'</svg>';
+  if(o.interactive){
+    const svg=host.firstChild,hit=svg.querySelector('.hit'),sr=svg.querySelector('.selrect');
+    const pick=e=>{
+      const r=svg.getBoundingClientRect();
+      const i=Math.min(N-1,Math.max(0,Math.floor((e.clientX-r.left-m.l)/bw)));
+      S.L.bucket=i;sr.setAttribute('x',m.l+i*bw);updateReadout();
+    };
+    hit.addEventListener('pointermove',pick);
+    hit.addEventListener('pointerdown',pick);
+  }
+}
+function updateReadout(){
+  const el=$('#wait-readout');if(!el||!S.L)return;
+  const L=S.L,b=L.curSer[L.bucket],t=tot(b);
+  const parts=KEYS.slice().sort((a,c)=>b[c]-b[a]).map(k=>'<span class="rchip"><i style="background:var(--w-'+k+')"></i>'+WN[k]+' <b>'+b[k].toFixed(1)+'</b></span>').join('');
+  el.innerHTML='<div class="rt"><strong>'+tlabel(L.bucket)+(L.bucket===N-1?' (now)':'')+'</strong><span>'+t.toFixed(1)+' sessions waiting</span></div><div class="rc">'+parts+'</div>';
+}
+function drawTrend(host,s,lv){
+  const W=Math.max(280,Math.floor(host.clientWidth||600)),H=W<520?230:260;
+  const m={l:56,r:12,t:38,b:24},iw=W-m.l-m.r,ih=H-m.t-m.b,pts=s.pts,n=pts.length;
+  const mx=Math.max(Math.max.apply(null,pts),s.baseline*1.25)*1.08;
+  const raw=mx/4,mag=Math.pow(10,Math.floor(Math.log10(raw)));let step=mag;
+  for(const f of [1,1.5,2,3,4,5,6,8,10]){step=f*mag;if(step>=raw)break;}
+  const ymax=step*4,y=v=>m.t+ih-(v/ymax)*ih,x=i=>m.l+(i/(n-1))*iw;
+  let g='<g class="grid">',ax='<g class="axis">';
+  for(let k=0;k<=4;k++){
+    const v=step*k;
+    g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+y(v)+'" y2="'+y(v)+'"/>';
+    ax+='<text x="'+(m.l-6)+'" y="'+(y(v)+4)+'" text-anchor="end">'+(k===0?'0':fmtMs(v))+'</text>';
+  }
+  g+='</g>';
+  [0,12,24,36].forEach(i=>{ax+='<text x="'+x(i)+'" y="'+(H-6)+'" text-anchor="'+(i===0?'start':'middle')+'">'+(i-48)+'h</text>';});
+  ax+='<text x="'+x(n-1)+'" y="'+(H-6)+'" text-anchor="end">now</text></g>';
+  let d='';pts.forEach((v,i)=>{d+=(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1);});
+  const area=d+'L'+x(n-1)+' '+y(0)+'L'+x(0)+' '+y(0)+'Z';
+  const by=y(s.baseline);
+  let mks='';
+  lv.trendMarkers.forEach(e=>{
+    const xx=x(e.at),label=s.markerLabel||e.label,anchor=xx>W*.62?'end':'start',tx=anchor==='end'?xx-5:xx+5;
+    mks+='<g class="mk"><line x1="'+xx+'" x2="'+xx+'" y1="22" y2="'+(m.t+ih)+'"/><text x="'+tx+'" y="16" text-anchor="'+anchor+'">'+esc(label)+'</text></g>';
+  });
+  const now=pts[n-1],ratio=now/s.baseline,col=ratio>=1.5?'var(--bad)':'var(--good)';
+  host.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Average duration for the selected statement over 48 hours">'+g+ax+
+    '<path class="trend-area" d="'+area+'"/><line class="trend-base" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+by+'" y2="'+by+'"/>'+
+    '<text class="trend-lab" x="'+(m.l+4)+'" y="'+(by-5)+'">typical '+fmtMs(s.baseline)+'</text>'+
+    '<path class="trend-line" d="'+d+'"/>'+mks+
+    '<circle cx="'+x(n-1)+'" cy="'+y(now)+'" r="5" fill="'+col+'" stroke="var(--surface)" stroke-width="2"/></svg>';
+}
+
+/* ---------- views ---------- */
+function show(name){
+  S.screen=name;
+  ['intro','brief','play','final'].forEach(n=>{$('#s-'+n).hidden=(n!==name);});
+  $('#prog').hidden=(name==='intro'||name==='final');
+  updateTop();
+  window.scrollTo(0,0);
+}
+function updateTop(){
+  $('#ptxt').textContent='Incident '+(S.lv+1)+' of '+LEVELS.length;
+  $('#ptotal').textContent=fmt(S.total);
+  $('#pips').innerHTML=LEVELS.map((_,i)=>{
+    const done=i<S.lv||(i===S.lv&&S.L&&S.L.resolved);
+    return '<i class="pip '+(done?'done':i===S.lv?'on':'')+'"></i>';
+  }).join('');
+}
+function legendHTML(interactive,filter){
+  return KEYS.map(k=>interactive
+    ?'<button class="lchip '+(filter===k?'on':'')+'" data-act="filter:'+k+'" aria-pressed="'+(filter===k)+'"><i style="background:var(--w-'+k+')"></i>'+WN[k]+'</button>'
+    :'<span class="lchip"><i style="background:var(--w-'+k+')"></i>'+WN[k]+'</span>').join('');
+}
+function drawIntro(){
+  const lv=LEVELS[0],host=$('#intro-chart');
+  drawWait(host,lv.ser0,lv,{fixed:false,interactive:false});
+}
+function renderIntro(){
+  $('#intro-legend').innerHTML=legendHTML(false);
+  $('#features').innerHTML=TOOLS.map(t=>'<div class="card feat"><h3>'+t.name+'</h3><p>'+TOOLWHY[t.k]+'</p></div>').join('');
+  const b=loadBest();
+  $('#best-line').textContent=b?'Your best total so far: '+fmt(b)+' pts':'No setup. Faster, cleaner runs score higher.';
+  $('#reset-best').hidden=!b;
+  drawIntro();
+}
+function renderBrief(){
+  const lv=cur();
+  $('#s-brief').innerHTML='<div class="card brief">'+
+    '<div class="tk-head"><span class="mono">'+lv.id+'</span><span class="tag">'+lv.pri+'</span><span class="muted sm">Incident '+(S.lv+1)+' of '+LEVELS.length+'</span></div>'+
+    '<h1>'+esc(lv.title)+'</h1><p class="alert">'+esc(lv.alert)+'</p><p class="story">'+esc(lv.story)+'</p>'+
+    '<dl class="facts">'+lv.facts.map(f=>'<div><dt>'+f[0]+'</dt><dd>'+esc(f[1])+'</dd></div>').join('')+'</dl>'+
+    (S.lv===0?'<p class="howto">Use the tabs to investigate. Select a statement in Top SQL, mark it as the culprit, choose a treatment and apply it. The clock and the revenue meter run while you work.</p>':'')+
+    '<button class="btn primary big" data-act="begin">Open the analyzer</button></div>';
+  show('brief');
+}
+function vitalsHTML(){
+  const lv=cur(),L=S.L,ok=L.resolved;
+  return '<div class="vitals">'+
+    '<div class="vit"><span class="lab">Avg response</span><span class="num" id="v-resp">'+fmt(L.vShown.resp)+'</span><span class="unit">ms</span><span class="sub">normal about '+lv.vitals.base+' ms</span></div>'+
+    '<div class="vit"><span class="lab">Sessions waiting</span><span class="num" id="v-wait">'+fmt(L.vShown.wait)+'</span><span class="sub">average right now</span></div>'+
+    '<div class="vit"><span class="lab">Revenue at risk</span><span class="num" id="v-cost">'+money(lv.rate*L.t/60000)+'</span><span class="sub">simulated</span></div>'+
+    '<div class="vit"><span class="lab">Time on incident</span><span class="num" id="v-clock">'+mmss(L.t)+'</span><span class="sub">'+(ok?'stopped':'running')+'</span></div>'+
+    '<div class="vit"><span class="lab">Status</span><span class="pill '+(ok?'good':'crit')+'">'+(ok?'Healthy':'Critical')+'</span></div></div>';
+}
+function tabsHTML(){
+  const L=S.L;
+  return '<nav class="tabs" role="tablist">'+TOOLS.map(t=>
+    '<button class="tab'+(L.nudge===t.k?' nudge':'')+'" role="tab" aria-selected="'+(L.tab===t.k)+'" data-act="tab:'+t.k+'">'+t.name+(L.tools.has(t.k)?'<span class="seen" title="Opened"></span>':'')+'</button>').join('')+'</nav>';
+}
+function emptyHTML(msg,btn){return '<div class="empty"><p>'+msg+'</p><button class="btn" data-act="tab:sql">'+(btn||'Go to Top SQL')+'</button></div>';}
+function waitPanel(){
+  const L=S.L,b=L.curSer[N-1],t=tot(b),top=KEYS.slice().sort((a,c)=>b[c]-b[a])[0];
+  const head=L.resolved?'Waits are back to normal':Math.round(b[top]/t*100)+'% of all waiting is on '+WN[top]+' right now';
+  return '<div class="wait-head"><strong>'+head+'</strong><span class="muted sm">Average sessions waiting, 10-minute buckets. Hover or tap a bar.</span></div>'+
+    '<div class="legend">'+legendHTML(true,L.filter)+'</div><div id="wait-chart" class="chart"></div><div id="wait-readout" class="readout"></div>';
+}
+function sqlPanel(){
+  const lv=cur(),L=S.L;
+  const val=s=>L.sortKey==='wait'?s.total:L.sortKey==='runs'?s.execs:s.avgMs;
+  const rows=lv.stmts.slice().sort((a,b)=>(val(a)-val(b))*L.sortDir);
+  const max=Math.max.apply(null,lv.stmts.map(s=>s.total));
+  const th=(k,label)=>'<th><button class="th'+(L.sortKey===k?' on':'')+'" data-act="sort:'+k+'">'+label+(L.sortKey===k?(L.sortDir===-1?' ▾':' ▴'):'')+'</button></th>';
+  const body=rows.map(s=>{
+    const on=L.suspect===s.id;
+    return '<tr class="'+(on?'sel':'')+'" data-act="row:'+s.id+'"><td><button class="rowbtn" data-act="row:'+s.id+'" aria-pressed="'+on+'"><span class="top1"><span class="lbl">'+esc(s.label)+'</span><span class="pill neutral">'+esc(s.app)+'</span>'+(L.culprit===s.id?'<span class="pill crit">Culprit</span>':'')+'</span><span class="one mono">'+esc(s.sql.replace(/\s+/g,' '))+'</span></button></td>'+
+      '<td><div class="wbar"><i style="width:'+Math.max(2,s.total/max*100).toFixed(0)+'%;background:var(--w-'+s.top+')"></i></div><span class="wv">'+s.total.toFixed(1)+' min/hr</span></td>'+
+      '<td class="n">'+fmt(s.execs)+'</td><td class="n">'+fmtMs(s.avgMs)+'</td>'+
+      '<td><span class="chip"><i style="background:var(--w-'+s.top+')"></i>'+WN[s.top]+'</span></td></tr>';
+  }).join('');
+  let detail='';
+  const s=selStmt();
+  if(s){
+    const segs=Object.keys(s.mix).sort((a,b)=>s.mix[b]-s.mix[a]);
+    detail='<div class="detail"><div class="dh"><div><h3>'+esc(s.label)+'</h3><span class="muted sm">'+esc(s.app)+' &middot; '+Math.round(s.share*100)+'% of all waiting &middot; '+fmt(s.execs)+' runs/hr</span></div>'+
+      '<div class="dact"><button class="btn" data-act="tab:plan">Open plan</button><button class="btn" data-act="tab:trend">Open trend</button><button class="btn primary" data-act="culprit:'+s.id+'" aria-pressed="'+(L.culprit===s.id)+'">'+(L.culprit===s.id?'Marked as culprit':'Mark as culprit')+'</button></div></div>'+
+      '<pre class="sqlbox">'+sqlHtml(s.sql)+'</pre><div class="mixlab">Where this statement waits</div>'+
+      '<div class="mix">'+segs.map(k=>'<i style="width:'+(s.mix[k]*100)+'%;background:var(--w-'+k+')"></i>').join('')+'</div>'+
+      '<div class="mixleg">'+segs.map(k=>'<span class="chip"><i style="background:var(--w-'+k+')"></i>'+WN[k]+' '+Math.round(s.mix[k]*100)+'%</span>').join('')+'</div></div>';
+  }
+  return '<div class="tablewrap"><table class="sql"><thead><tr><th>Statement</th>'+th('wait','Wait time')+th('runs','Runs/hr')+th('avg','Avg')+'<th>Top wait</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
+    (detail||'<p class="muted sm" style="margin-top:12px">Select a statement to see its SQL and where it waits.</p>');
+}
+function markBtn(id){
+  const on=S.L.culprit===id;
+  return '<button class="btn primary" data-act="culprit:'+id+'" aria-pressed="'+on+'">'+(on?'Marked as culprit':'Mark as culprit')+'</button>';
+}
+function planPanel(){
+  const L=S.L,s=selStmt();
+  if(!s)return emptyHTML('Pick a statement in Top SQL first. The plan shows how the database runs it.');
+  const view=s.planPrev?L.planView:'cur',plan=view==='prev'?s.planPrev:s.plan;
+  const meta=s.planMeta?(view==='prev'?s.planMeta.prev:s.planMeta.cur):'';
+  const toggle=s.planPrev?'<div class="seg-ctl" role="group" aria-label="Plan version"><button data-act="pv:cur" aria-pressed="'+(view==='cur')+'">Current plan</button><button data-act="pv:prev" aria-pressed="'+(view==='prev')+'">Previous plan</button></div>':'';
+  return '<div class="plan-head"><div><h3>'+esc(s.label)+'</h3><span class="muted sm">'+(meta?esc(meta):esc(s.app))+'</span></div><div class="dact">'+toggle+markBtn(s.id)+'</div></div><div class="plan">'+
+    plan.map(n=>'<div class="node'+(n.flag?' hot':'')+'" data-d="'+n.d+'" style="--d:'+n.d+'"><div><strong>'+esc(n.op)+'</strong> '+(n.obj?'<span class="mono muted sm">'+esc(n.obj)+'</span>':'')+
+      (n.rows?'<div class="muted sm">'+esc(n.rows)+'</div>':'')+(n.flag?'<div class="flag">'+esc(n.flag)+'</div>':'')+(n.note?'<div class="note">'+esc(n.note)+'</div>':'')+'</div>'+
+      '<div class="nc">'+(n.cost?'<span class="cv">'+n.cost+'%</span><div class="cost"><i style="width:'+n.cost+'%"></i></div>':'')+'</div></div>').join('')+'</div>';
+}
+function blockingPanel(){
+  const lv=cur(),L=S.L,b=lv.blocking;
+  if(!b)return '<div class="empty"><p>'+esc(lv.noBlock)+'</p><p class="sm">Ruling a cause out is progress too.</p></div>';
+  const l=b.lead;
+  return '<p class="muted sm" style="margin-bottom:12px">'+(l.blocks+b.victims.length-6)+' sessions are waiting on a lock. They form one chain.</p>'+
+    '<div class="sess lead"><span class="sid">#'+l.sid+'</span><div><strong>'+esc(l.app)+'</strong> <span class="pill crit">Lead blocker</span><div class="muted sm">'+esc(l.user)+' &middot; transaction open for '+l.held+' &middot; blocking '+l.blocks+' sessions</div><pre>'+esc(l.sql)+'</pre></div>'+
+    '<button class="btn primary" data-act="culprit:'+l.stmt+'" aria-pressed="'+(L.culprit===l.stmt)+'">'+(L.culprit===l.stmt?'Marked as culprit':'Mark as culprit')+'</button></div>'+
+    '<div class="victims">'+b.victims.map(v=>'<div class="sess"><span class="sid">#'+v.sid+'</span><div><strong>'+esc(v.app)+'</strong> <span class="muted sm">waiting '+v.waited+' on a lock</span><pre>'+esc(v.sql)+'</pre></div></div>').join('')+
+    '<p class="muted sm">+'+b.more+' more waiting</p></div>';
+}
+function trendPanel(){
+  const lv=cur(),s=selStmt();
+  if(!s)return emptyHTML('Pick a statement in Top SQL first. Trend compares it with its own history.');
+  const now=s.pts[47],ratio=now/s.baseline,bad=ratio>=1.5;
+  return '<div class="wait-head"><strong>'+esc(s.label)+'</strong><span class="muted sm">Average duration, last 48 hours</span></div><div id="trend-chart" class="chart"></div>'+
+    '<div class="callout '+(bad?'bad':'good')+'">Now '+fmtMs(now)+' against a typical '+fmtMs(s.baseline)+'. '+(bad?'That is '+(ratio<10?ratio.toFixed(1):Math.round(ratio))+'x slower than normal.':'Within its normal range.')+'</div><div class="dact" style="margin-top:12px">'+markBtn(s.id)+'</div>';
+}
+function advicePanel(){
+  const s=selStmt();
+  if(!s)return emptyHTML('Pick a statement in Top SQL first. The advisor gives recommendations for that statement.');
+  if(!s.advice.length)return '<div class="empty"><p><strong>No high-impact recommendations for '+esc(s.label)+'.</strong></p><p class="sm">It is running as expected, so tuning it would not move the needle.</p></div>';
+  return s.advice.map(a=>'<div class="rec"><div><span class="pill neutral">'+esc(a.tag)+'</span></div><h4>'+esc(a.title)+'</h4><p class="sm">'+esc(a.detail)+'</p><p class="gain">'+esc(a.gain)+'</p></div>').join('');
+}
+function panelHTML(){
+  const k=S.L.tab;
+  return k==='wait'?waitPanel():k==='sql'?sqlPanel():k==='plan'?planPanel():k==='blocking'?blockingPanel():k==='trend'?trendPanel():advicePanel();
+}
+function scoreLevel(){
+  const L=S.L,sec=Math.floor(L.t/1000);
+  const timePen=Math.min(500,sec*2),wrongPen=150*L.wrong,hintPen=100*L.hints,keyB=L.keyHit?150:0,toolB=20*L.tools.size;
+  return {sec:sec,timePen:timePen,wrongPen:wrongPen,hintPen:hintPen,keyB:keyB,toolB:toolB,tools:L.tools.size,wrong:L.wrong,hints:L.hints,total:Math.max(100,1000-timePen-wrongPen-hintPen+keyB+toolB),ms:L.t};
+}
+function resultHTML(){
+  const lv=cur(),r=S.L.result,last=S.lv===LEVELS.length-1;
+  const row=(a,b,c)=>'<tr><td>'+a+'</td><td class="'+(c||'')+'">'+b+'</td></tr>';
+  return '<div class="card result"><div class="stamp">Resolved</div><h3>Back to normal in '+mmss(r.ms)+'</h3><p>'+esc(r.fx.win)+'</p>'+
+    '<table class="score">'+row('Base','1,000')+row('Time ('+r.sec+' s)','−'+r.timePen,r.timePen?'neg':'')+
+    (r.wrong?row('Wrong attempts ('+r.wrong+')','−'+r.wrongPen,'neg'):'')+(r.hints?row('Hints ('+r.hints+')','−'+r.hintPen,'neg'):'')+
+    row('Found the key evidence',r.keyB?'+'+r.keyB:'0',r.keyB?'pos':'')+row('Tools opened ('+r.tools+' of '+TOOLS.length+')','+'+r.toolB,'pos')+
+    '<tr class="total"><td>Incident score</td><td>'+fmt(r.total)+'</td></tr></table>'+
+    '<p class="sm muted" style="margin-bottom:12px">This incident cost about '+money(r.cost)+' in lost revenue (simulated).</p>'+
+    '<p class="lesson sm"><strong>What cracked it:</strong> '+esc(lv.lesson)+'</p>'+
+    '<button class="btn primary" data-act="next">'+(last?'See final score':'Next incident')+'</button></div>';
+}
+function caseHTML(){
+  const lv=cur(),L=S.L;
+  let h='<div class="card ticket"><div class="tk-head"><span class="mono sm">'+lv.id+'</span><span class="tag">'+lv.pri+'</span></div><h2>'+esc(lv.title)+'</h2><p>'+esc(lv.alert)+'</p></div>';
+  if(L.resolved)return h+resultHTML();
+  const c=L.culprit?lv.stmts.find(s=>s.id===L.culprit):null;
+  h+='<div class="card box"><h3>Culprit</h3>'+(c?'<div class="pick"><strong>'+esc(c.label)+'</strong><span class="pill neutral">'+esc(c.app)+'</span></div><button class="link" data-act="unmark">Clear</button>':'<p class="muted sm">Not marked yet. Select a statement in Top SQL, or find the lead blocker, then choose Mark as culprit.</p>')+'</div>';
+  h+='<div class="card box"><h3>Treatment</h3><div class="opts">'+lv.fixes.map(f=>
+    '<label class="opt'+(L.fix===f.id?' sel':'')+'"><input type="radio" name="fix" value="'+f.id+'" data-fk="fix-'+f.id+'"'+(L.fix===f.id?' checked':'')+'><span>'+esc(f.title)+'</span></label>').join('')+'</div>'+
+    '<button class="btn primary" style="width:100%;margin-top:12px" data-act="apply"'+((c&&L.fix)?'':' disabled')+'>'+(!c?'Mark a culprit first':!L.fix?'Choose a treatment':'Apply fix')+'</button>'+
+    '<div aria-live="polite" style="margin-top:10px">'+(L.msg?'<div class="msg bad">'+esc(L.msg)+'</div>':'')+'</div></div>';
+  h+='<div class="card box"><h3>Stuck?</h3>'+L.hintLog.map((t,i)=>'<p class="hint"><b>Hint '+(i+1)+'.</b> '+esc(t)+'</p>').join('')+
+    '<button class="btn" data-act="hint"'+(L.hints>=lv.hints.length?' disabled':'')+'>'+(L.hints>=lv.hints.length?'No more hints':'Get a hint (−100 pts)')+'</button>'+
+    '<div class="explored"><span class="sq">'+TOOLS.map(t=>'<i class="'+(L.tools.has(t.k)?'on':'')+'" title="'+t.name+'"></i>').join('')+'</span><span>'+L.tools.size+' of '+TOOLS.length+' tools opened</span></div></div>';
+  return h;
+}
+function renderAll(){
+  const ae=document.activeElement,fk=ae&&ae.dataset?(ae.dataset.fk||ae.dataset.act):null;
+  const L=S.L;
+  const tool=TOOLS.find(t=>t.k===L.tab);
+  $('#s-play').innerHTML=vitalsHTML()+'<div class="play-grid"><div>'+tabsHTML()+'<p class="tool-desc">'+tool.desc+'</p><div class="card panel">'+panelHTML()+'</div></div><aside class="case">'+caseHTML()+'</aside></div>';
+  drawCharts();
+  updateTop();
+  if(fk){
+    const el=$('#s-play [data-fk="'+fk+'"]')||$('#s-play [data-act="'+fk+'"]');
+    if(el&&!el.disabled)el.focus({preventScroll:true});
+  }
+}
+function drawCharts(){
+  const L=S.L,lv=cur();
+  if(L.tab==='wait'){
+    const host=$('#wait-chart');
+    if(host){drawWait(host,L.curSer,lv,{fixed:L.resolved,filter:L.filter,sel:L.bucket,interactive:true});updateReadout();}
+  }else if(L.tab==='trend'){
+    const s=selStmt(),host=$('#trend-chart');
+    if(s&&host)drawTrend(host,s,lv);
+  }
+}
+function writeVitals(){
+  const L=S.L,a=$('#v-resp'),b=$('#v-wait');
+  if(a)a.textContent=fmt(L.vShown.resp);
+  if(b)b.textContent=fmt(L.vShown.wait);
+}
+
+/* ---------- game logic ---------- */
+function markTool(k){
+  const L=S.L,lv=cur(),t=TOOLS.find(x=>x.k===k);
+  if(t.sel&&!L.suspect)return;
+  L.tools.add(k);S.allTools.add(k);
+  if(k===lv.key&&(!lv.keyNeedsCulprit||L.suspect===lv.culprit))L.keyHit=true;
+}
+function culpritMsg(lv,id){
+  const s=lv.stmts.find(x=>x.id===id);
+  if(s.verdict)return 'Not that one. '+s.verdict;
+  const ratio=s.pts[47]/s.baseline;
+  return 'Not that one. '+s.label+' is '+Math.round(s.share*100)+'% of waiting and '+(ratio<1.5?'is running about as fast as usual.':'has slowed down, but not enough to explain the spike.');
+}
+function applyFix(){
+  const lv=cur(),L=S.L;
+  if(L.resolved||!L.culprit||!L.fix)return;
+  const fx=lv.fixes.find(f=>f.id===L.fix);
+  if(L.culprit!==lv.culprit){L.wrong++;L.msg=culpritMsg(lv,L.culprit)+' (−150 pts)';L.fix=null;}
+  else if(!fx.ok){L.wrong++;L.msg='Right statement, wrong treatment. '+fx.why+' (−150 pts)';L.fix=null;}
+  else{resolve(fx);return;}
+  Sfx.play('wrong');renderAll();
+}
+function resolve(fx){
+  const lv=cur(),L=S.L;
+  Sfx.play('win');
+  L.resolved=true;L.msg=null;L.tab='wait';L.bucket=N-1;
+  const r=scoreLevel();r.fx=fx;r.cost=lv.rate*L.t/60000;r.title=lv.title;
+  L.result=r;S.total+=r.total;S.results.push(r);
+  const from={resp:L.vShown.resp,wait:L.vShown.wait},ser0=L.curSer.map(b=>Object.assign({},b)),ser1=lv.ser1;
+  renderAll();
+  tween(1100,p=>{
+    L.curSer=ser0.map((b,i)=>{const o={};for(const k of KEYS)o[k]=b[k]+(ser1[i][k]-b[k])*p;return o;});
+    L.vShown.resp=from.resp+(lv.vitals.resp[1]-from.resp)*p;
+    L.vShown.wait=from.wait+(lv.wait1-from.wait)*p;
+    if(S.L===L&&S.screen==='play'){
+      writeVitals();
+      if(L.tab==='wait'){drawCharts();}
+    }
+  },()=>{
+    if(S.L===L&&S.screen==='play'){
+      const pill=$('#s-play .vit .pill');
+      updateTop();
+    }
+  });
+}
+function rankFor(t){return t>=3200?'Principal DBA':t>=2600?'On-call hero':t>=1900?'Sharp triager':'Rookie on call';}
+function renderFinal(){
+  const best=Math.max(loadBest(),S.total);saveBest(best);
+  const cost=S.results.reduce((a,r)=>a+r.cost,0),ms=S.results.reduce((a,r)=>a+r.ms,0);
+  $('#s-final').innerHTML='<div class="final"><div class="card final-hero"><div class="eyebrow">Case closed</div><h1>'+rankFor(S.total)+'</h1>'+
+    '<div class="bigscore">'+fmt(S.total)+'</div><p class="muted">points across '+LEVELS.length+' incidents &middot; best run '+fmt(best)+'</p>'+
+    '<p style="margin:14px 0 18px">You spent '+mmss(ms)+' on incident calls. At the simulated rates, those outages cost about '+money(cost)+'. Every minute you shave off the diagnosis is revenue back.</p>'+
+    '<div class="cta-row"><a class="btn primary big" href="'+esc(TRIAL_URL)+'" target="_blank" rel="noopener">Start a free trial</a><button class="btn big" data-act="again">Play again</button></div>'+
+    '<p class="muted sm" style="margin-top:12px">See these same charts on your own databases with SolarWinds Observability Self-Hosted.</p></div>'+
+    '<div class="final-grid"><div class="card box"><h3>Your incidents</h3>'+S.results.map(r=>'<div class="lvrow"><span><strong>'+esc(r.title)+'</strong></span><b>'+fmt(r.total)+'</b><span class="muted sm">'+mmss(r.ms)+' &middot; '+r.wrong+' wrong &middot; '+r.hints+' hints</span></div>').join('')+'</div>'+
+    '<div class="card box"><h3>Tools you used</h3>'+TOOLS.map(t=>{const u=S.allTools.has(t.k);return '<div class="trow"><strong>'+t.name+'</strong><span class="pill '+(u?'good':'neutral')+'">'+(u?'Used':'Not tried')+'</span><div class="muted sm">'+TOOLWHY[t.k]+'</div></div>';}).join('')+'</div></div></div>';
+  show('final');Sfx.play('fanfare');
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]');if(!el||el.disabled)return;
+  const a=el.dataset.act,i=a.indexOf(':'),k=i<0?a:a.slice(0,i),v=i<0?'':a.slice(i+1);
+  const L=S.L;
+  if(k==='culprit')Sfx.play(L&&L.culprit===v?'tick':'lock');
+  else if(k!=='sound'&&k!=='apply'){
+    const snd={start:'begin',begin:'begin',tab:'tab',row:'select',hint:'hint',again:'begin'}[k];
+    Sfx.play(snd||'tick');
+  }
+  switch(k){
+    case 'sound':{const on=Sfx.toggle();updateSnd();if(on)Sfx.play('tick');break;}
+    case 'resetbest':clearBest();renderIntro();break;
+    case 'start':S.lv=0;S.total=0;S.results=[];S.allTools=new Set();S.L=null;renderBrief();break;
+    case 'begin':S.L=newLevel();show('play');renderAll();break;
+    case 'tab':if(!L)break;L.tab=v;if(L.nudge===v)L.nudge=null;markTool(v);renderAll();break;
+    case 'row':L.suspect=v;renderAll();break;
+    case 'sort':if(L.sortKey===v)L.sortDir*=-1;else{L.sortKey=v;L.sortDir=-1;}renderAll();break;
+    case 'filter':L.filter=L.filter===v?null:v;renderAll();break;
+    case 'pv':L.planView=v;renderAll();break;
+    case 'culprit':if(L.resolved)break;if(L.culprit===v){L.culprit=null;}else{L.culprit=v;L.suspect=v;}L.msg=null;renderAll();break;
+    case 'unmark':L.culprit=null;renderAll();break;
+    case 'apply':applyFix();break;
+    case 'hint':{
+      const lv=cur();
+      if(!L.resolved&&L.hints<lv.hints.length){const h=lv.hints[L.hints];L.hints++;L.hintLog.push(h.text);L.nudge=h.tab;renderAll();}
+      break;
+    }
+    case 'next':
+      if(S.lv>=LEVELS.length-1){renderFinal();}
+      else{S.lv++;S.L=null;renderBrief();}
+      break;
+    case 'again':S.lv=0;S.total=0;S.results=[];S.allTools=new Set();S.L=null;show('intro');renderIntro();break;
+  }
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t&&t.name==='fix'&&S.L&&!S.L.resolved){S.L.fix=t.value;Sfx.play('tick');renderAll();}
+});
+let rz;
+window.addEventListener('resize',()=>{
+  clearTimeout(rz);
+  rz=setTimeout(()=>{
+    if(S.screen==='intro')drawIntro();
+    else if(S.screen==='play'&&S.L)drawCharts();
+  },120);
+});
+
+/* ---------- clock ---------- */
+let last=performance.now();
+setInterval(()=>{
+  const now=performance.now(),dt=Math.min(1000,now-last);last=now;
+  if(S.screen==='play'&&S.L&&!S.L.resolved){
+    S.L.t+=dt;
+    const c=$('#v-clock'),m=$('#v-cost');
+    if(c)c.textContent=mmss(S.L.t);
+    if(m)m.textContent=money(cur().rate*S.L.t/60000);
+  }
+},250);
+
+/* ---------- idle reset (for booths and shared screens) ---------- */
+const IDLE_WARN_MS=45000,IDLE_RESET_MS=60000;
+let lastAct=Date.now();
+function hideIdle(){const el=$('#idle');if(el)el.hidden=true;}
+function idleReset(){
+  S.lv=0;S.total=0;S.results=[];S.allTools=new Set();S.L=null;
+  clearBest();hideIdle();show('intro');renderIntro();
+}
+['pointerdown','pointermove','keydown','wheel','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{lastAct=Date.now();hideIdle();},{passive:true}));
+window.addEventListener('scroll',()=>{lastAct=Date.now();hideIdle();},{passive:true});
+setInterval(()=>{
+  if(S.screen==='intro'){hideIdle();lastAct=Date.now();return;}
+  const idle=Date.now()-lastAct;
+  if(idle>=IDLE_RESET_MS){idleReset();lastAct=Date.now();}
+  else if(idle>=IDLE_WARN_MS){const el=$('#idle'),s=$('#idle-s');if(s)s.textContent=Math.max(1,Math.ceil((IDLE_RESET_MS-idle)/1000));if(el)el.hidden=false;}
+},1000);
+
+/* ---------- boot ---------- */
+function start(data){
+  updateSnd();
+  renderIntro();
+  if(data&&typeof data.lv==='number'&&data.screen&&data.screen!=='intro'&&data.screen!=='final'){
+    S.lv=Math.min(LEVELS.length-1,data.lv);S.total=data.total||0;renderBrief();
+  }
+}
+try{window.claude&&window.claude.hot&&window.claude.hot.snapshot&&window.claude.hot.snapshot(function(){return {lv:S.lv,total:S.total,screen:S.screen};});}catch(e){}
+try{
+  if(window.claude&&window.claude.hot&&window.claude.hot.ready)window.claude.hot.ready(start);
+  else start(window.claude&&window.claude.hot&&window.claude.hot.data?window.claude.hot.data:{});
+}catch(e){start({});}
+})();
+</script>
+
+</body></html>
